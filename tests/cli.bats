@@ -278,6 +278,19 @@ find_nonhost_pid_pair() {
 	[ "$(captured_stderr)" = "" ]
 }
 
+@test "cat refuses a symlink target path" {
+	real_path="$TEST_TMPDIR/cat-real.txt"
+	link_path="$TEST_TMPDIR/cat-link.txt"
+	printf 'secret\n' >"$real_path"
+	ln -s "$real_path" "$link_path"
+
+	run run_cli cat "pid:$$" "$link_path"
+
+	[ "$status" -ne 0 ]
+	[ "$(captured_stdout)" = "" ]
+	[[ "$(captured_stderr)" == *"error: target path is a symlink: $link_path"* ]]
+}
+
 @test "checksum writes the default sha256 digest to stdout" {
 	target_path="$TEST_TMPDIR/checksum.txt"
 	printf 'payload' >"$target_path"
@@ -288,6 +301,19 @@ find_nonhost_pid_pair() {
 	[ "$status" -eq 0 ]
 	[ "$(captured_stdout)" = "sha256  $expected_digest  $target_path" ]
 	[ "$(captured_stderr)" = "" ]
+}
+
+@test "checksum refuses a symlink target path" {
+	real_path="$TEST_TMPDIR/checksum-real.txt"
+	link_path="$TEST_TMPDIR/checksum-link.txt"
+	printf 'payload\n' >"$real_path"
+	ln -s "$real_path" "$link_path"
+
+	run run_cli checksum "pid:$$" "$link_path"
+
+	[ "$status" -ne 0 ]
+	[ "$(captured_stdout)" = "" ]
+	[[ "$(captured_stderr)" == *"error: target path is a symlink: $link_path"* ]]
 }
 
 @test "extract copies a target-root file to a host destination" {
