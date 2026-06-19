@@ -71,6 +71,10 @@ The man page is the source for planning, implementation, and testing. The
 implementation, acceptance tests, verification results, and Git history
 determine project completion.
 
+Branch names and commit messages are part of implementation progress tracking.
+They should make the delivered slice, current project state, and remaining work
+easier to reconstruct from Git history.
+
 Future or not-yet-implemented behavior may be documented in the man page as
 part of the project specification. Agents must distinguish specified behavior
 from implemented, tested, committed behavior when reporting status.
@@ -97,6 +101,8 @@ A persistent plan may:
 - group related future work into reviewable implementation slices;
 - reference the man page, handoff, branches, issues, and commits that will carry the work forward.
 - track the currently selected narrow implementation slice.
+- summarize the relevant branch and commit sequence that shows implementation
+  progress.
 
 A persistent plan must:
 
@@ -146,6 +152,10 @@ If a verification command cannot be run, say so plainly and explain what was not
 ## Git Control Policy
 
 All work must be done through small, reviewable Git changes.
+
+Branches and commits are progress records as well as review units. Use them to
+show which narrow specification slice is being implemented, what has already
+landed, and what remains outside the current branch.
 
 Agents must not work directly on `main` unless explicitly instructed.
 
