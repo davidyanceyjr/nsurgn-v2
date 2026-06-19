@@ -510,6 +510,10 @@ cmd_cat() {
 	done
 
 	resolved="$(resolve_target_path "$target" "$target_path")" || return "$?"
+	if [[ -L "$resolved" ]]; then
+		error "target path is a symlink: $target_path"
+		return 5
+	fi
 	if [[ ! -e "$resolved" ]]; then
 		error "target path not found: $target_path"
 		return 4
@@ -555,6 +559,10 @@ cmd_checksum() {
 	done
 
 	resolved="$(resolve_target_path "$target" "$target_path")" || return "$?"
+	if [[ -L "$resolved" ]]; then
+		error "target path is a symlink: $target_path"
+		return 5
+	fi
 	if [[ ! -e "$resolved" ]]; then
 		error "target path not found: $target_path"
 		return 4
