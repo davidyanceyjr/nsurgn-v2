@@ -8,7 +8,7 @@ The primary goal is working Linux CLI/TUI software whose behavior is documented,
 
 Agents must optimize for observable behavior, not repository appearance.
 
-Do not create polished placeholder code, ceremonial documentation, fake completion summaries, or broad architecture plans that are not tied to working behavior.
+Do not create polished placeholder code, ceremonial documentation, fake completion summaries, or broad architecture plans that cannot be traced to planned or working behavior.
 
 ## Core Rule
 
@@ -23,14 +23,14 @@ man page → acceptance tests → implementation → verification → review →
 Not:
 
 ```text
-idea → large spec → roadmap → placeholder code → help output
+idea → unlabeled plan → placeholder code → help output
 ```
 
 Exceptions require explicit user instruction or a clear note explaining why the normal workflow does not apply.
 
 ## Source of Truth
 
-The authoritative interface contract is the man page:
+The authoritative implemented interface contract is the man page:
 
 ```text
 doc/<tool>.1.scd
@@ -58,11 +58,56 @@ The man page defines the user-visible contract:
 - versioning expectations
 - known limitations
 
-Agents must not add commands, flags, config files, output formats, dependencies, or behaviors that are not documented in the man page.
+Agents must not add commands, flags, config files, output formats, dependencies, or behaviors to the implementation unless they are documented in the man page.
 
 If implementation requires changing behavior, update the man page first.
 
-Do not document future behavior as if it already exists.
+Future behavior may be planned in `.codex/plans/current.md` or an explicitly requested planning document. A plan may describe intended behavior that is not implemented yet, but it must clearly identify itself as planning material and must not claim that behavior is implemented, tested, or released.
+
+The man page may be edited as a future-version specification only when the active persistent plan explicitly says the work is specification-only. In that case, the man page must avoid claiming that the future contract is implemented, and completion of the specification does not mean completion of the software.
+
+When future behavior graduates into implementation work, update or confirm the man page contract before adding tests and code.
+
+## Planning Policy
+
+Persistent plans are allowed when they coordinate multi-session documentation and implementation work.
+
+The default persistent plan location is:
+
+```text
+.codex/plans/current.md
+```
+
+A persistent plan may:
+
+- describe intended future behavior;
+- preserve decisions, open questions, and sequencing across sessions;
+- define documentation passes needed before tests and implementation;
+- group related future work into reviewable implementation slices;
+- reference the man page, handoff, branches, issues, and commits that will carry the work forward.
+
+A persistent plan must:
+
+- state whether it is planning-only, documentation work, implementation work, or mixed coordination;
+- distinguish intended future behavior from implemented behavior;
+- avoid claiming completion without tests and verification;
+- identify the next smallest reviewable branch or behavior slice when implementation is ready;
+- be updated when work pauses, materially redirects, or spans sessions.
+
+A persistent plan must not:
+
+- substitute for the man page when implementing behavior;
+- substitute for acceptance tests;
+- substitute for Git history;
+- mark behavior complete merely because it is specified;
+- hide failing tests, skipped verification, or unresolved decisions;
+- require agents to edit unrelated files to make the plan look complete.
+
+For documentation-only specification work, the plan may direct agents to update the man page before tests exist. That is an explicit exception to the implementation loop, not evidence that the behavior works. The next implementation slice must still follow:
+
+```text
+man page → acceptance tests → implementation → verification → review → commit
+```
 
 ## Required Workflow
 
@@ -300,7 +345,7 @@ Pull request description must include:
 - Anything intentionally not done
 ```
 
-Do not open a PR that only adds plans, roadmaps, or placeholder code.
+Do not open a PR that only adds placeholder code or unsupported completion claims. A planning-only PR is allowed when explicitly requested or when it updates the persistent plan, but it must be labeled and described as planning work rather than feature completion.
 
 Do not describe behavior as complete unless it is implemented and tested.
 
@@ -328,7 +373,7 @@ Prefer squash merge for small feature branches unless the repository uses a diff
 
 The final merge commit or squash message must describe the actual behavior delivered.
 
-Do not merge documentation-only plans as feature completion.
+Do not merge documentation-only plans as feature completion. Merge them only as planning or specification updates.
 
 Do not tag a release from a branch unless:
 
@@ -375,6 +420,8 @@ Use a handoff when work is interrupted, blocked, partially complete, or ready fo
 
 A handoff must be factual and resumable.
 
+Handoffs and persistent plans have different roles. The plan preserves multi-session intent and sequencing. The handoff preserves the current working state needed to resume safely.
+
 Session handoffs must be saved to:
 
 ```text
@@ -400,7 +447,7 @@ A handoff must not claim completion unless the Definition of Done is satisfied.
 
 Do not create long narrative summaries.
 
-Do not create roadmap-style handoffs.
+Do not create roadmap-style handoffs. Put durable sequencing and future-work planning in `.codex/plans/current.md`.
 
 Do not hide failing tests or skipped verification.
 
@@ -439,7 +486,7 @@ Do not claim a design is complete if it has not produced or preserved passing te
 
 ## Documentation Policy
 
-Documentation is subordinate to behavior.
+Documentation is subordinate to behavior except for explicitly labeled planning and future-version specification work.
 
 Allowed documentation files by default:
 
@@ -447,6 +494,8 @@ Allowed documentation files by default:
 README.md
 AGENTS.md
 doc/<tool>.1.scd
+.codex/plans/current.md
+.codex/handoff/session_handoff.md
 docs/ARCHITECTURE.md
 docs/TESTING.md
 docs/RELEASE.md
@@ -457,7 +506,6 @@ Do not create additional documentation files unless explicitly requested.
 Do not create:
 
 ```text
-ROADMAP.md
 VISION.md
 DESIGN_NOTES.md
 IMPLEMENTATION_PLAN.md
@@ -468,13 +516,16 @@ ADR-*.md
 
 unless the user explicitly asks for them or the repository already uses them.
 
+Use `.codex/plans/current.md` instead of creating roadmap, checklist, project status, or implementation-plan files by default.
+
 Prefer updating existing documentation over creating new files.
 
-For every documentation change, include at least one of:
+For every behavior-facing documentation change, include at least one of:
 
 - a test proving the documented behavior
 - an implementation change matching the documentation
 - a packaging, install, or release command that uses the documentation
+- an explicit planning-only note in `.codex/plans/current.md` that states tests and implementation are intentionally deferred
 
 Do not create a documentation forest.
 
@@ -517,11 +568,13 @@ VERSIONING
 BUGS
 ```
 
-Every documented command must have at least one acceptance test.
+Every implemented or release-claimed command documented in the man page must have at least one acceptance test.
 
-Every documented exit status must have at least one test.
+Every implemented or release-claimed exit status documented in the man page must have at least one test.
 
-Every documented stdout/stderr behavior must have a test unless explicitly marked as unstable human-facing output.
+Every implemented or release-claimed stdout/stderr behavior must have a test unless explicitly marked as unstable human-facing output.
+
+Future-version man-page specifications may temporarily lead tests during a documentation-only planning pass. Before any specified behavior is implemented or claimed complete, it must receive acceptance tests.
 
 Examples in the man page should be executable or close to executable.
 
@@ -698,6 +751,8 @@ A command that only prints help is not an implementation.
 
 Do not mark a command complete if its only behavior is to display usage text.
 
+When the man page contains an explicit future-version contract, `--help` only has to reflect the implemented command surface until the corresponding behavior slice is implemented and tested.
+
 ## Implementation Policy
 
 Implement the smallest complete behavior that satisfies the current tests.
@@ -867,6 +922,9 @@ When working in this repository, follow this instruction:
 ```text
 Implement only the behavior documented in the man page.
 
+For planning-only work, update `.codex/plans/current.md` and any explicitly
+requested specification documents without claiming implementation completion.
+
 Before implementation:
 1. inspect git status and the current branch;
 2. create or use a specific branch for the behavior;
@@ -897,7 +955,7 @@ Reject these outcomes:
 ```text
 The repository looks complete but commands do nothing.
 The help output is polished but implementation is missing.
-The docs describe future behavior as current behavior.
+The docs describe future behavior as implemented behavior.
 Tests only check that files exist.
 Tests only check that --help prints.
 The TUI contains all business logic.
@@ -907,7 +965,7 @@ The agent hides errors behind friendly output.
 The agent commits unrelated formatting changes.
 The agent works directly on main without being told to.
 The agent uses vague branch names or vague commit messages.
-The PR contains plans instead of behavior.
+The PR contains unlabeled plans and presents them as feature completion.
 ```
 
 ## Preferred Agent Behavior
@@ -930,4 +988,4 @@ Prefer deleting unsupported claims.
 
 Prefer failing loudly over pretending success.
 
-When uncertain, do not invent behavior. Tighten the man page and tests first.
+When uncertain during implementation, do not invent behavior. Tighten the man page and tests first. During planning, record future behavior as intended or unresolved until it becomes a tested contract.

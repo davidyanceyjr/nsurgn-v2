@@ -1,419 +1,122 @@
-# Current Plan: Complete nsurgn v1 Specification
+# Current Plan: Resolve v1 Contract Review Gaps
 
 ## Purpose
 
-Produce a complete, precise first-version specification for a working `nsurgn` application.
+Resolve the specification documentation gaps found during review so `doc/nsurgn.1.md` becomes the contract implementation engineers follow.
 
-This plan is documentation-only. It does not implement code, create tests, define helper files, or track feature completion with checkboxes. Its output is a man page contract that is specific enough to drive later acceptance tests and implementation.
+This plan is documentation-only. It does not implement code, create tests, or claim feature completion. Its output is an updated man page contract. Acceptance tests and implementation must come after the man page states the behavior.
 
 Primary source of truth:
 
 - `doc/nsurgn.1.md`
 
-Supporting context:
-
-- `nsurgn_specification_v1.0.md` is currently untracked and may be used as background for intended first-version scope.
-
 ## Scope
 
-The v1 specification should describe the complete intended first working application, not only the current partial implementation.
-
-The v1 contract includes:
-
-- artifact discovery through procfs;
-- artifact grouping and classification;
-- read-only inspection commands;
-- file read, copy, install, extract, and remove operations;
-- executable extraction;
-- signal operations with safeguards;
-- explicit namespace entry through `nsenter`;
-- precise stdout, stderr, exit status, file, dependency, and option behavior.
-
-The man page may describe behavior that is not implemented yet, because this plan is for the complete first-version specification. Once the specification is complete, implementation progress should be tracked through Git branches and commits, not through a separate completed-work checklist in this file.
-
-## Tracking Policy
-
-Use Git as the implementation tracker.
-
-The plan should not contain:
-
-- implementation checkboxes;
-- "done" markers;
-- per-feature completion status;
-- code ownership assignments;
-- progress tables that duplicate Git history;
-- claims that behavior is implemented.
-
-Implementation progress should be represented by:
-
-- focused branches named for observable behavior;
-- commits that add man-page-aligned tests and implementation;
-- commit messages tied to behavior;
-- handoff updates when work pauses or redirects.
-
-If Git is not sufficient for a later coordination need, create or update only the required handoff note at `.codex/handoff/session_handoff.md`. Do not add a separate project status tracker.
-
-## Specification Rules
-
-- Keep `doc/nsurgn.1.md` as the authoritative command contract.
-- Prefer exact, testable statements over broad operational language.
-- Every documented command must define syntax, arguments, options, stdout, stderr, exit statuses, files read/written, and limitations.
-- Every command that can mutate files or processes must define safeguards before it defines success behavior.
-- Unresolved ambiguity may remain only in `UNRESOLVED BEHAVIOR`, and each item must state the decision needed to complete v1.
-- Examples must match the v1 contract, even if not implemented yet.
-- Do not edit `bin/`, `lib/`, or `tests/` while executing this specification plan.
-
-## Pass 1: Declare v1 Release Contract
-
-Goal: make `doc/nsurgn.1.md` unambiguously describe the complete first working version.
-
-Decisions to write into the man page:
-
-- The documented command set is the target v1 contract.
-- `--version` remains `nsurgn 0.1.0` until the repository intentionally bumps the version.
-- `--help` must eventually list every current-contract command.
-- Behavior described in `COMMANDS`, `OPTIONS`, `ARGUMENTS`, `STDOUT`, `STDERR`, `EXIT STATUS`, `FILES`, and `ENVIRONMENT` is normative for v1.
-
-Required outcome:
-
-- No command section reads as aspirational, optional, or "planned".
-- Any behavior still undecided is moved to `UNRESOLVED BEHAVIOR` with a concrete decision question.
-
-## Pass 2: Complete Command Inventory
-
-Goal: ensure every v1 command has a complete specification.
-
-Commands to specify:
-
-- `list`
-- `scout`
-- `all`
-- `tree`
-- `report`
-- `inspect`
-- `map`
-- `ps`
-- `mounts`
-- `exe`
-- `install`
-- `inject`
-- `extract`
-- `remove`
-- `signal`
-- `ls`
-- `cat`
-- `stat`
-- `exists`
-- `checksum`
-- `enter`
-
-Each command section must define:
-
-- synopsis;
-- purpose;
-- accepted options;
-- argument requirements;
-- target resolution behavior;
-- stdout on success;
-- stderr diagnostics for common failures;
-- exit statuses for common failures;
-- file reads/writes or process effects;
-- safety limits.
-
-Required outcome:
-
-- No command relies on "includes", "metadata", "details", or "summary" without exact fields or examples.
-
-## Pass 3: Define Output Formats
-
-Goal: make stdout contracts stable enough for acceptance tests.
-
-Global output decisions:
-
-- Table headers must be exact strings.
-- Table row separators must be defined: two spaces, tabs, or fixed-width alignment.
-- Sort order must be defined for every multi-row output.
-- Missing values must use one representation, such as `-`, unless a command explicitly says otherwise.
-- Text reports must define exact field labels and ordering.
-- Human-facing warnings must go to stderr, not stdout.
-
-Commands needing exact output formats:
-
-- `list`
-- `scout`
-- `all`
-- `tree`
-- `report`
-- `inspect`
-- `map`
-- `ps`
-- `mounts`
-- `exe`
-- `ls`
-- `stat`
-- `checksum`
-- `install`
-- `extract`
-- `remove`
-- `signal`
-
-Required outcome:
-
-- The current `UNRESOLVED BEHAVIOR` items for table spacing, `ls`, and `stat` output are resolved or rewritten as concrete remaining decision questions.
-
-## Pass 4: Define Artifact Discovery
-
-Goal: make discovery, grouping, scoring, classification, and leader selection deterministic.
-
-Decisions to specify:
-
-- Which `/proc` paths are read during discovery.
-- Which missing or unreadable `/proc` files are warnings, skipped rows, partial success, or hard failures.
-- How numeric PIDs are enumerated and sorted.
-- How artifact IDs are assigned.
-- Whether artifact IDs are stable only within one command invocation.
-- How `pid:<number>` targets interact with artifact discovery.
-- How `--include-host` affects discovery output and target selection.
-- How leaders are selected and how ties are broken.
-- How namespace IDs are parsed from `/proc/<pid>/ns/*`.
-- How namespace PID is parsed from `/proc/<pid>/status`.
-- How command names are rendered from `/proc/<pid>/cmdline` or fallback fields.
-
-Required outcome:
-
-- A test author can build deterministic host-PID and fixture expectations without guessing how artifacts are discovered.
-
-## Pass 5: Define Classification And Scoring
-
-Goal: make evidence scoring and classification literal.
-
-Decisions to specify:
-
-- Exact classification precedence.
-- Exact score contribution of every evidence signal.
-- Whether evidence signals are additive once or per occurrence.
-- Case sensitivity for cgroup, runtime, mount, and executable hints.
-- How multiple runtime hints are ordered and joined.
-- How `--no-runtime-hints` affects classification and score.
-- How `--no-mount-scan` affects classification and score.
-- What `suspicious` means in deterministic evidence terms.
-- What "weakly classified artifact" means for signal safeguards.
-
-Required outcome:
-
-- Classification labels and scores can be verified from fixed procfs-like input.
-
-## Pass 6: Define Global Options
-
-Goal: every global option has a command-by-command effect.
-
-Options to specify:
-
-- `--group`
-- `--format`
-- `--verbose`
-- `--quiet`
-- `--no-color`
-- `--host-pid`
-- `--include-host`
-- `--no-runtime-hints`
-- `--no-mount-scan`
-- `--help`
-- `--version`
-
-Decisions to specify:
-
-- Which commands honor each option.
-- Which option and command combinations are usage errors.
-- Whether no-op global options are allowed for commands where they do not matter.
-- Exact diagnostics for invalid option values.
-- Whether `--format text` applies to all commands or only discovery/reporting commands.
-- What `--verbose` writes for file operations and discovery.
-- Which warnings `--quiet` suppresses.
-- Whether color is ever emitted in v1.
-
-Required outcome:
-
-- The `OPTIONS` section maps each option to observable behavior.
-
-## Pass 7: Define Target And Path Semantics
-
-Goal: make ARTIFACT_OR_PID and path handling consistent across commands.
-
-Target decisions:
-
-- Accepted forms: `A<N>`, `<number>`, `pid:<number>`.
-- Exit status and diagnostics for invalid targets.
-- Exit status and diagnostics for missing host PIDs.
-- Exit status and diagnostics for stale artifact IDs.
-
-Path decisions:
-
-- Empty path handling.
-- Relative path handling.
-- `.` and `..` component handling.
-- Repeated slash handling.
-- Trailing slash handling.
-- Symlink handling per command.
-- Directory handling per command.
-- File-not-found and destination-exists diagnostics.
-- Permission-denied diagnostics.
-
-Required outcome:
-
-- The `ARGUMENTS` section and each file command agree.
-
-## Pass 8: Define File Operation Semantics
-
-Goal: make file commands complete and safe.
-
-Commands to specify:
-
-- `ls`
-- `cat`
-- `stat`
-- `exists`
-- `checksum`
-- `install`
-- `inject`
-- `extract`
-- `remove`
-- `exe --extract`
-
-Decisions to specify:
-
-- Whether copy operations preserve metadata by default.
-- Exact effect of `--preserve`.
-- Exact effect of `--mode`, `--owner`, and `--group`.
-- Whether `--backup` requires `--overwrite`.
-- Backup filename and overwrite rules.
-- Parent directory behavior for destination paths.
-- Whether overwrite unlinks first, truncates in place, or copies over.
-- Symlink behavior for source and destination paths.
-- Directory copy and directory removal behavior.
-- Mount-point refusal behavior.
-- Behavior when files change during operation.
-
-Required outcome:
-
-- File operation sections are explicit enough to test with temporary directories and controlled symlink fixtures.
-
-## Pass 9: Define Destructive Safeguards
-
-Goal: make file deletion and process signaling refusal rules deterministic.
-
-`remove` decisions:
-
-- Required `--force` behavior.
-- Exact protected path list.
-- Whether descendants of protected paths are refused.
-- Directory refusal without `--recursive`.
-- Recursive removal semantics.
-- Mount-point detection and refusal semantics.
-- Symlink deletion semantics.
-
-`signal` decisions:
-
-- Accepted signal names and numbers.
-- Normalized signal display.
-- Host PID 1 refusal.
-- Host-classified artifact refusal.
-- Required flags for host-classified targets.
-- High-impact signal list.
-- Weak-classification high-impact signal refusal.
-- `--all` partial success behavior.
-
-Required outcome:
-
-- Destructive actions cannot succeed through ambiguous wording.
-
-## Pass 10: Define Dependency And Platform Contract
-
-Goal: define required platform capabilities and command dependencies.
-
-Decisions to specify:
-
-- Required shell/runtime assumptions.
-- Required `/proc` features.
-- Required standard utilities.
-- Whether GNU coreutils are required.
-- Which checksum programs are required for each algorithm.
-- `nsenter` dependency scope.
-- Exit status and diagnostic for missing command-specific dependencies.
-- Behavior on unsupported kernels or unavailable namespace types.
-
-Required outcome:
-
-- The `DESCRIPTION`, `FILES`, `ENVIRONMENT`, `LIMITATIONS`, and `EXIT STATUS` sections agree on dependencies and failure modes.
-
-## Pass 11: Align Exit Statuses And Diagnostics
-
-Goal: every documented failure mode has one exit status and one diagnostic shape.
-
-Decisions to specify:
-
-- Usage error: exit `2`.
-- Unsafe path refusal: exit `5`.
-- Target/path/source/destination missing: exit `4`, except `exists` path absence if v1 keeps exit `1`.
-- Permission denied: exit `3`.
-- Stale artifact ID: exit `6`.
-- Partial success: exit `7`.
-- Process changed or disappeared: exit `8`.
-- Unsupported platform or missing command dependency: exit `9`.
-- General error boundaries for exit `1`.
-
-Required outcome:
-
-- `STDERR` lists common diagnostics by shape.
-- `EXIT STATUS` explains command-specific exceptions.
-
-## Pass 12: Align Examples
-
-Goal: examples demonstrate the complete v1 contract without ambiguity.
-
-Decisions to specify:
-
-- Whether examples use artifact IDs such as `A1`, host PIDs, or both.
-- When examples use `sudo`.
-- Which examples demonstrate safeguards.
-- Which examples demonstrate read-only inspection.
-- Which examples demonstrate file mutation.
-- Which examples demonstrate namespace entry.
-
-Required outcome:
-
-- Every example corresponds to a precisely specified v1 command behavior.
-
-## Completion Criteria
-
-This specification plan is complete when `doc/nsurgn.1.md` contains a complete v1 contract with:
-
-- every v1 command listed in `COMMANDS`;
-- exact syntax for every command and option;
-- exact stdout format for every command;
-- exact stderr diagnostic shapes for common failures;
-- exact exit statuses for every documented success and failure class;
-- exact target, path, symlink, directory, overwrite, backup, metadata, and mount-point semantics;
-- exact discovery, grouping, classification, scoring, runtime-hint, and leader-selection rules;
-- exact dependency and platform assumptions;
-- examples aligned with the v1 contract;
-- no unresolved item that blocks acceptance-test authoring.
+This review pass resolves two incomplete contract areas:
+
+- classification and scoring semantics;
+- file operation semantics.
+
+Do not edit `bin/`, `lib/`, or `tests/` while executing this plan.
+
+## Contract Rules
+
+- The man page is the authoritative contract.
+- Acceptance tests must be derived from the completed man page contract.
+- Acceptance tests must not decide unspecified command behavior, output formats, diagnostics, or exit statuses.
+- Any remaining ambiguity must be stated in `UNRESOLVED BEHAVIOR` as a concrete specification decision question, not as work deferred to tests.
+- Do not describe behavior as implemented unless it is already implemented and verified.
+
+## Review Finding 1: Classification And Scoring
+
+Finding:
+
+- Classification and scoring are partly specified, but the man page does not yet fully define additive signal rules, hint matching case sensitivity, `--no-runtime-hints`, `--no-mount-scan`, and weak-classification semantics for signal safeguards.
+
+Resolution to write into `doc/nsurgn.1.md`:
+
+- Evidence signals are counted once per artifact unless the signal explicitly says it is counted per process.
+- Namespace-difference signals are counted once per artifact.
+- `Process is PID 1 inside nested PID namespace` is counted once per matching process, but the leader-selection rule still selects one leader.
+- Cgroup, runtime, executable, and mountinfo hint matching is ASCII case-sensitive.
+- A cgroup or runtime hint contributes points once per artifact per hint token, even if multiple processes contain the same token.
+- Mountinfo hints contribute points once per artifact per hint token, even if multiple mountinfo lines contain the same token.
+- Runtime hints are ordered as `k8s`, `containerd`, `docker`, `crio`, `libpod`, `lxc`, `systemd`.
+- `--no-runtime-hints` disables cgroup path hint scoring, runtime hint labels, container ID hint scoring, and runtime-derived `container-ish` classification. Namespace, rootfs, executable, and mountinfo evidence still apply.
+- With `--no-runtime-hints`, runtime hint output is `none`.
+- `--no-mount-scan` prevents discovery from reading `/proc/<pid>/mountinfo` and disables mountinfo-derived scoring and classification evidence during discovery.
+- `--no-mount-scan` does not prevent commands that explicitly inspect mounts, such as `mounts` or `report --with-mounts`, from reading the selected leader mountinfo.
+- A weakly classified artifact for `signal` safeguards is any artifact classified as `suspicious` or `isolated` with score below 6.
+- High-impact signals to weakly classified artifacts require `--force`.
+
+Required man-page outcome:
+
+- A test author can compute classification, score, runtime hint output, and weak-classification signal refusal from fixed procfs-like input without guessing.
+
+## Review Finding 2: File Operation Semantics
+
+Finding:
+
+- File operation semantics remain partly unresolved, especially metadata preservation, overwrite mechanics, symlink behavior, and behavior when files change during operation.
+
+Resolution to write into `doc/nsurgn.1.md`:
+
+- `install`, `inject`, `extract`, and `exe --extract` copy regular file contents only unless a command explicitly documents symlink behavior.
+- Default copy behavior does not preserve owner, group, mode, timestamps, xattrs, ACLs, or other metadata beyond what normal file creation applies.
+- `install --mode MODE` sets the destination mode after copying.
+- `install --owner UID` sets the destination owner after copying.
+- `install --group GID` sets the destination group after copying.
+- `extract --preserve` preserves mode and timestamps when the platform copy command supports them. It does not preserve owner, group, xattrs, or ACLs.
+- `--backup` is valid only with `--overwrite`.
+- A backup path is `<destination>.nsurgn.bak`.
+- If the backup path already exists, the operation fails before copying.
+- Overwrite behavior removes the destination path first, then creates the replacement at the same path. It does not truncate in place.
+- Existing destinations are refused unless `--overwrite` is set.
+- Parent directories are never created unless `install --parents` is set.
+- `install --parents` creates missing parent directories with mode `0755`, subject to process umask.
+- `install` refuses host source symlinks by default. If symlink support is later desired, it must be specified as a new documented option before implementation.
+- `extract --no-dereference` copies a source symlink as a symlink. The copied symlink target text is unchanged.
+- `extract --dereference` copies the referent bytes and refuses dangling symlinks.
+- `remove` removes a symlink itself, not its referent.
+- `cat`, `checksum`, and `stat` do not follow symlinks unless their command section explicitly says they do. The v1 contract should state the selected behavior for each.
+- Directory copies are not supported by `install`, `inject`, `extract`, or `exe --extract`.
+- Directory removal requires `remove --recursive`.
+- Mount points are refused for `remove`, including recursive removal.
+- If a source file changes during copy, `nsurgn` fails with exit 8 when it detects the change. If the change is not detectable, the operation is subject to the live-filesystem limitation.
+- If the leader process disappears, the target root becomes inaccessible, or the resolved source or destination changes type during an operation, `nsurgn` exits 8.
+
+Required man-page outcome:
+
+- File operation sections are explicit enough for acceptance tests using temporary files, directories, symlinks, existing destination paths, backup paths, and simulated disappearing targets.
+
+## Review Procedure
+
+1. Update `doc/nsurgn.1.md` with the classification and scoring decisions above.
+2. Update `doc/nsurgn.1.md` with the file operation decisions above.
+3. Remove or narrow `UNRESOLVED BEHAVIOR` items that these decisions satisfy.
+4. Confirm no wording says acceptance tests decide unspecified behavior.
+5. Confirm `COMMANDS`, `OPTIONS`, `ARGUMENTS`, `STDERR`, `EXIT STATUS`, `FILES`, and `LIMITATIONS` agree with the updated contract.
 
 ## Documentation Verification
 
-For this documentation-only plan, run:
+Run:
 
 ```sh
 git diff --check
 git status --short
 ```
 
-Then manually review:
+Manual review checklist:
 
-- every command in `COMMANDS` has a complete contract;
-- every global option has an observable effect or a usage-error rule;
-- every example maps to a specified command behavior;
-- `UNRESOLVED BEHAVIOR` is empty or contains only explicitly accepted non-blocking limitations;
-- no line claims implementation completion.
+- Classification score calculation is deterministic.
+- Hint matching and option effects are deterministic.
+- Weak-classification signal safeguards are deterministic.
+- File copy metadata behavior is deterministic.
+- Overwrite and backup behavior is deterministic.
+- Symlink behavior is deterministic per command.
+- File-change and disappearing-process behavior maps to exit 8.
+- `UNRESOLVED BEHAVIOR` contains no item that blocks acceptance-test authoring for these review findings.
 
-Implementation tests are not evidence for completing this specification plan. Later implementation work must use Git branches and commits to track progress against the completed man page contract.
+## Next Smallest Action
+
+Apply this plan to `doc/nsurgn.1.md` in one documentation-only change, then review the man page diff against the checklist above.
