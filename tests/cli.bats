@@ -343,6 +343,61 @@ find_nonhost_pid_pair() {
 	[ "$(captured_stderr)" = "" ]
 }
 
+@test "install refuses a symlink host source" {
+	real_path="$TEST_TMPDIR/install-real.txt"
+	link_path="$TEST_TMPDIR/install-link.txt"
+	target_path="$TEST_TMPDIR/install-symlink-target.txt"
+	printf 'do not link me\n' >"$real_path"
+	ln -s "$real_path" "$link_path"
+
+	run run_cli install "pid:$$" "$link_path" "$target_path"
+
+	[ "$status" -ne 0 ]
+	[ ! -e "$target_path" ]
+	[ "$(captured_stdout)" = "" ]
+	[[ "$(captured_stderr)" == *"source path is a symlink"* ]]
+}
+
+@test "inject refuses a symlink host source" {
+	real_path="$TEST_TMPDIR/inject-real.txt"
+	link_path="$TEST_TMPDIR/inject-link.txt"
+	target_path="$TEST_TMPDIR/inject-symlink-target.txt"
+	printf 'do not link me\n' >"$real_path"
+	ln -s "$real_path" "$link_path"
+
+	run run_cli inject "pid:$$" "$link_path" "$target_path"
+
+	[ "$status" -ne 0 ]
+	[ ! -e "$target_path" ]
+	[ "$(captured_stdout)" = "" ]
+	[[ "$(captured_stderr)" == *"source path is a symlink"* ]]
+}
+
+@test "install refuses a directory host source" {
+	source_path="$TEST_TMPDIR/install-source-dir"
+	target_path="$TEST_TMPDIR/install-dir-target"
+	mkdir "$source_path"
+
+	run run_cli install "pid:$$" "$source_path" "$target_path"
+
+	[ "$status" -ne 0 ]
+	[ ! -e "$target_path" ]
+	[ "$(captured_stdout)" = "" ]
+	[[ "$(captured_stderr)" == *"source path is not a regular file"* ]]
+}
+
+@test "install refuses a character device host source" {
+	[ -c /dev/null ] || skip "/dev/null is not a character device"
+	target_path="$TEST_TMPDIR/install-device-target"
+
+	run run_cli install "pid:$$" /dev/null "$target_path"
+
+	[ "$status" -ne 0 ]
+	[ ! -e "$target_path" ]
+	[ "$(captured_stdout)" = "" ]
+	[[ "$(captured_stderr)" == *"source path is not a regular file"* ]]
+}
+
 @test "remove without --force is refused and leaves the target file in place" {
 	target_path="$TEST_TMPDIR/remove-without-force.txt"
 	printf 'keep me\n' >"$target_path"

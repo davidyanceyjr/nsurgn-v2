@@ -614,9 +614,17 @@ cmd_install() {
 	require_arg "$target" "ARTIFACT_OR_PID" || return "$?"
 	require_arg "$host_src" "HOST_SRC" || return "$?"
 	require_arg "$target_path" "TARGET_PATH" || return "$?"
+	if [[ -L "$host_src" ]]; then
+		error "source path is a symlink: $host_src"
+		return 5
+	fi
 	if [[ ! -e "$host_src" ]]; then
 		error "source path not found: $host_src"
 		return 4
+	fi
+	if [[ ! -f "$host_src" ]]; then
+		error "source path is not a regular file: $host_src"
+		return 1
 	fi
 	resolved="$(resolve_target_path "$target" "$target_path")" || return "$?"
 	if [[ -e "$resolved" ]]; then
