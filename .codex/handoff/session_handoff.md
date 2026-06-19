@@ -48,7 +48,7 @@ Results:
 
 - Select the next documented behavior slice before implementation.
 
-## Future Slice Candidates
+## Future Implementation Slice Candidates
 
 - `fix/remove-directory-recursive-guard`
   - Status: not implemented.
