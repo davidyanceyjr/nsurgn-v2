@@ -3,23 +3,21 @@
 ## State
 
 - Branch: `test/nsurgn-acceptance-contract`
-- Status: paused by user; contract-gap plan approved, not implemented
-- Last completed step: review found contract gaps and user approved the resolution plan
+- Status: protected remove path refusal implemented and committed
+- Last completed step: committed `dbf4918 fix: refuse protected remove paths`
 
 ## Changed Files
 
-- `bin/nsurgn`
-- `lib/commands.sh`
-- `lib/output.sh`
-- `tests/cli.bats`
-- `doc/nsurgn.1.md`
-- Existing untracked context: `AGENTS.md`, `.codex/skills/*`, `nsurgn_specification_v1.0.md`
+- Committed: `lib/commands.sh`
+- Committed: `tests/cli.bats`
+- Existing untracked context: `nsurgn_specification_v1.0.md`
 
 ## Verification
 
-Commands run before pause:
+Commands run:
 
 ```sh
+bats tests/cli.bats
 shellcheck bin/* lib/*.sh tests/*.bats
 shfmt -d .
 bats tests
@@ -31,32 +29,24 @@ git status --short
 
 Results:
 
-- Passing: all listed checks passed before pause
+- Passing: all listed checks passed
 - Failing: none currently known
-- Not run: no implementation checks after plan approval, because no new implementation changes were made
+- Not run: no PR creation or remote CI checks
 
 ## Alignment
 
-- Man page: authoritative contract exists at `doc/nsurgn.1.md`
-- Tests: current tests pass but do not cover all reviewed contract gaps
-- Implementation: partial; minimal tested slice works, but review found documented behavior not yet implemented
+- Man page: protected remove paths were already documented in `doc/nsurgn.1.md`
+- Tests: `tests/cli.bats` now covers `remove pid:$$ /etc --force` exit 5 and stderr diagnostic
+- Implementation: `lib/commands.sh` now refuses documented protected remove paths before removal
 
 ## Blockers
 
-- Work intentionally paused until next session.
-- Files are untracked, so `git diff --stat` is empty. Use `git status --short` and inspect files directly.
+- None for the protected remove path refusal behavior.
+- Broader documented behavior gaps may still remain from the earlier contract-gap review.
 
 ## Next Smallest Action
 
-Add failing Bats coverage for protected remove path refusal:
-
-```sh
-./bin/nsurgn remove pid:$$ /etc --force
-```
-
-Expected contract: exit `5`, stderr includes `error: refusing protected path: /etc`, no removal attempted.
-
-Then implement only that behavior and rerun the full verification gate.
+- Continue the approved contract-gap work by selecting the next documented behavior gap and adding a failing Bats test before implementation.
 
 ## Do Not Touch
 
