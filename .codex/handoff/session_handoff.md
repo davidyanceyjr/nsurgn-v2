@@ -2,12 +2,13 @@
 
 ## State
 
-- Branch: `main`
-- Status: planning handoff only; no implementation slice is active.
-- Last completed step: reviewed project state and identified recommended upcoming implementation slices for the next session to plan.
+- Branch: `docs/plan-install-symlink-refusal`
+- Status: planning handoff only; `fix/install-refuse-host-source-symlink` is now planned in `.codex/plans/current.md` but not implemented.
+- Last completed step: created the planning-only current plan for `fix/install-refuse-host-source-symlink`.
 
 ## Changed Files
 
+- `.codex/plans/current.md`
 - `.codex/handoff/session_handoff.md`
 
 ## Verification
@@ -19,19 +20,15 @@ git status --short
 git branch --show-current
 git diff --stat
 git log --oneline -5
-shellcheck bin/* lib/*.sh tests/*.bats
-shfmt -d .
-bats tests
-./bin/nsurgn --help
-./bin/nsurgn --version
+git diff --check
 ```
 
 Results:
 
-- Passing: `shellcheck`, `shfmt -d`, `bats tests`, `./bin/nsurgn --help`, `./bin/nsurgn --version`.
+- Passing: `git diff --check`.
 - Failing: none observed.
-- Not run: no implementation-specific failing-test checkpoint because this handoff is for next-session planning.
-- Notes: `bats tests` passed with one environment-dependent skip: `tree prints visible non-host pid namespace rows`.
+- Not run: `shellcheck`, `shfmt -d`, `bats tests`, `./bin/nsurgn --help`, and `./bin/nsurgn --version` were not rerun because this update only changes planning and handoff notes.
+- Notes: prior handoff recorded `shellcheck`, `shfmt -d`, `bats tests`, `./bin/nsurgn --help`, and `./bin/nsurgn --version` as passing. That prior `bats tests` run had one environment-dependent skip: `tree prints visible non-host pid namespace rows`.
 
 ## Alignment
 
@@ -42,12 +39,12 @@ Results:
 ## Blockers
 
 - None for planning.
-- Before implementation, create or use a specific non-`main` branch for the selected behavior slice.
+- Before implementation, create or use branch `fix/install-refuse-host-source-symlink` for the selected behavior slice.
 
 ## Next Smallest Action
 
-- Plan the next implementation slices, starting from these recommended candidates:
-  - `fix/install-refuse-host-source-symlink`: `doc/nsurgn.1.md` says `install` refuses host source symlinks, but `cmd_install` currently only checks source existence before `cp -P`.
+- The next implementation slice is planned in `.codex/plans/current.md`: `fix/install-refuse-host-source-symlink`.
+- Other recommended future candidates:
   - `fix/remove-directory-recursive-guard`: `doc/nsurgn.1.md` says directory removal requires `--recursive`; current `cmd_remove` only parses `--force`.
   - `feat/extract-overwrite-option`: `doc/nsurgn.1.md` documents `extract --overwrite|--no-overwrite`; current `cmd_extract` refuses existing destinations and parses no options.
   - `feat/exists-success-path`: implementation returns success for existing paths, but tests currently cover only the absent-path exit 1 case.

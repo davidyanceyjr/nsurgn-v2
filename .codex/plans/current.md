@@ -2,57 +2,69 @@
 
 ## State
 
-- Work type: implementation work.
+- Work type: planning-only for the next implementation slice.
+- Current branch: `docs/plan-install-symlink-refusal`.
+- Selected slice: `fix/install-refuse-host-source-symlink`.
+- Status: planned, not implemented.
 - Last completed branch: `fix/refuse-symlink-file-reads`.
-- Selected slice: make `nsurgn cat` and `nsurgn checksum` refuse symlink target paths.
-- Status: implemented and verified.
-- Implementation commit: `256da3c fix: refuse symlink file reads`.
 - Last checked: 2026-06-19.
 
-## Why This Slice
+## Slice Goal
 
-- The behavior is already documented in `doc/nsurgn.1.md`.
-- The existing implementation partially enforces the documented contract: `cat` refuses directories, but neither `cat` nor `checksum` currently refuses symlinks.
-- The slice is small enough to complete with shell acceptance tests using `pid:$$` and temporary files.
-- It does not require nested PID namespaces, privileged runtime APIs, or broad discovery changes.
+Make `nsurgn install` and its `inject` alias refuse a host source path that is a symlink, matching the documented `HOST_SRC` contract.
 
 ## Man Page Alignment
 
-- `doc/nsurgn.1.md` documents `nsurgn cat ARTIFACT_OR_PID TARGET_PATH [--max-bytes BYTES]`.
-- The `cat` section says directories and symlinks are refused.
-- `doc/nsurgn.1.md` documents `nsurgn checksum ARTIFACT_OR_PID TARGET_PATH [--sha256|--sha512|--md5]`.
-- The `checksum` section says directories and symlinks are refused.
-- No man page contract change is expected before implementation unless acceptance-test wording exposes an ambiguity.
+- `doc/nsurgn.1.md` documents:
+  - `nsurgn install ARTIFACT_OR_PID HOST_SRC TARGET_PATH [...]`.
+  - `inject` is an alias for `install`.
+  - `HOST_SRC must be a regular file. Host source symlinks are refused.`
+- No man page change is expected for this slice unless the acceptance test exposes an ambiguity in the diagnostic or exit status.
+- The planned behavior must not add symlink install support. The man page says any future symlink install support requires a new documented option before implementation.
 
-## Test Alignment
+## Current Implementation Gap
 
-- Existing tests cover:
-  - `cat` success with `--max-bytes`.
-  - `checksum` success with default SHA-256 output.
-  - target path safety for relative paths.
-- Added acceptance tests:
-  - `cat` refuses a symlink target path, writes no stdout, writes an error diagnostic to stderr, and exits non-zero.
-  - `checksum` refuses a symlink target path, writes no stdout, writes an error diagnostic to stderr, and exits non-zero.
-- The new tests were first run against the pre-fix implementation and failed because both commands exited 0.
+- `lib/commands.sh` `cmd_install` currently checks `[[ ! -e "$host_src" ]]` before copying.
+- `cmd_install` then runs `cp -P "$host_src" "$resolved"`.
+- With a source symlink, `cp -P` can preserve the symlink instead of refusing it, which conflicts with the documented regular-file-only contract.
+- Because `inject` dispatches to `cmd_install`, one implementation fix should cover both command names.
 
-## Implementation Alignment
+## Acceptance Tests To Add First
 
-- `cmd_cat` resolves the target path and refuses missing paths and directories, then reads the path.
-- `cmd_checksum` resolves the target path and refuses missing paths, then hashes the path.
-- `cmd_cat` and `cmd_checksum` now refuse symlink target paths after resolution and before reading or hashing.
-- The implementation did not change checksum output, `cat --max-bytes`, missing-path behavior, directory behavior, or target path validation.
+- Add a Bats test near the existing install coverage in `tests/cli.bats`:
+  - create a regular source file in `$TEST_TMPDIR`;
+  - create a symlink host source pointing to that file;
+  - run `run_cli install "pid:$$" "$source_link" "$target_path"`;
+  - assert non-zero exit;
+  - assert target path was not created;
+  - assert stdout is empty;
+  - assert stderr includes a concrete diagnostic for refusing a source symlink.
+- Add either:
+  - a second focused test for `inject` using the same symlink setup, or
+  - a single parameterized/helper-based test pattern if it stays readable in Bats.
+- Run the new tests before implementation and confirm they fail because symlink sources are not refused.
 
-## Verification
+## Implementation Plan
 
-- Failing-test checkpoint was run before implementation:
+- Update `cmd_install` in `lib/commands.sh`.
+- After required-argument validation and before resolving or copying the destination, reject host source symlinks with `[[ -L "$host_src" ]]`.
+- Keep missing-source behavior unchanged:
+  - a dangling symlink should still be treated as a source symlink refusal if the symlink path itself exists as a symlink;
+  - a non-existent ordinary path should keep the existing `source path not found` behavior.
+- Require a regular file with `[[ -f "$host_src" ]]` after the symlink check so directories, FIFOs, devices, and other non-regular sources are refused under the documented `HOST_SRC must be a regular file` contract.
+- Do not change target path validation, existing-target refusal, parent-directory behavior, output format, or overwrite-related future behavior in this slice.
+
+## Verification Plan
+
+Run the failing-test checkpoint after adding tests:
 
 ```sh
 bats tests/cli.bats
 ```
 
-- Result: failed only the new `cat` and `checksum` symlink refusal tests because both commands exited 0.
+Expected checkpoint result: the new install/inject symlink-source test coverage fails against the current implementation.
 
-- Final verification passed:
+Run final verification after implementation:
 
 ```sh
 shellcheck bin/* lib/*.sh tests/*.bats
@@ -62,15 +74,18 @@ bats tests
 ./bin/nsurgn --version
 ```
 
-- `bats tests` passed with one environment-dependent skip: `tree prints visible non-host pid namespace rows`.
+Only claim completion if the final verification passes. Preserve any environment-dependent skip notes from `bats tests`.
 
 ## Out Of Scope
 
-- Implementing `ls` or `stat`.
-- Changing extract/install symlink behavior.
-- Changing artifact discovery, namespace grouping, or file copy semantics.
-- Broad normalization of file-operation error messages beyond the new symlink refusal diagnostic.
+- Adding install support for symlink sources.
+- Implementing `install --parents`, `--mode`, `--owner`, `--group`, `--backup`, `--overwrite`, or `--no-overwrite`.
+- Changing `extract` symlink behavior.
+- Changing target-path symlink refusal for `cat`, `checksum`, or other file-read commands.
+- Refactoring copy helpers unless the test-driven fix needs a small local helper.
 
 ## Next Smallest Action
 
-- No active implementation slice is selected.
+- Create or switch to branch `fix/install-refuse-host-source-symlink`.
+- Add the acceptance test coverage described above.
+- Run `bats tests/cli.bats` and confirm the expected failing-test checkpoint before changing implementation.
