@@ -81,6 +81,26 @@ captured_stderr() {
 	[ "$(captured_stderr)" = "" ]
 }
 
+@test "all includes the current process with namespace metadata" {
+	run run_cli --quiet all
+
+	[ "$status" -eq 0 ]
+	awk -v pid="$$" '
+		$1 == pid {
+			found = 1
+			for (field = 1; field <= 12; field++) {
+				if ($field == "") {
+					exit 2
+				}
+			}
+		}
+		END {
+			exit found ? 0 : 1
+		}
+	' "$STDOUT_FILE"
+	[ "$(captured_stderr)" = "" ]
+}
+
 @test "inspect of a visible host pid prints metadata and exits 0" {
 	run run_cli --include-host inspect "pid:$$"
 

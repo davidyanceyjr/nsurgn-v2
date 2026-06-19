@@ -109,12 +109,140 @@ resolve_target_path() {
 	printf '%s/%s\n' "$root" "${path#/}"
 }
 
+namespace_id_for() {
+	local pid="$1"
+	local name="$2"
+	local link
+
+	link="$(readlink "/proc/$pid/ns/$name" 2>/dev/null)" || return 1
+	link="${link#*[}"
+	link="${link%]}"
+	printf '%s\n' "$link"
+}
+
+status_values_for() {
+	local pid="$1"
+
+	awk '
+		/^PPid:/ {
+			ppid = $2
+		}
+		/^NSpid:/ {
+			nspid = $NF
+		}
+		END {
+			if (ppid == "") {
+				exit 1
+			}
+			if (nspid == "") {
+				nspid = "-"
+			}
+			printf "%s\n%s\n", ppid, nspid
+		}
+	' "/proc/$pid/status" 2>/dev/null
+}
+
+cgroup_hint_for() {
+	local pid="$1"
+	local cgroup=""
+	local hints=()
+	local hint
+
+	cgroup="$(cat "/proc/$pid/cgroup" 2>/dev/null)" || {
+		printf 'none\n'
+		return 0
+	}
+
+	[[ "$cgroup" == *"kubepods"* ]] && hints+=("k8s")
+	[[ "$cgroup" == *"containerd"* ]] && hints+=("containerd")
+	[[ "$cgroup" == *"docker"* ]] && hints+=("docker")
+	[[ "$cgroup" == *"crio"* ]] && hints+=("crio")
+	[[ "$cgroup" == *"libpod"* ]] && hints+=("libpod")
+	[[ "$cgroup" == *"lxc"* ]] && hints+=("lxc")
+	[[ "$cgroup" == *"machine.slice"* ]] && hints+=("systemd")
+
+	if ((${#hints[@]} == 0)); then
+		printf 'none\n'
+		return 0
+	fi
+
+	local IFS=/
+	hint="${hints[*]}"
+	printf '%s\n' "$hint"
+}
+
+command_for() {
+	local pid="$1"
+	local command=""
+
+	command="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
+	command="${command% }"
+	if [[ -z "$command" && -r "/proc/$pid/comm" ]]; then
+		IFS= read -r command <"/proc/$pid/comm" || true
+	fi
+	if [[ -z "$command" ]]; then
+		command="-"
+	fi
+	printf '%s\n' "$command"
+}
+
 cmd_list() {
 	return 0
 }
 
 cmd_all() {
+	local quiet="${NSURGN_QUIET:-0}"
+	local proc_path
+	local pid
+	local status_values
+	local ppid
+	local nspid
+	local pid_ns
+	local mnt_ns
+	local net_ns
+	local user_ns
+	local uts_ns
+	local ipc_ns
+	local cgroup_ns
+	local time_ns
+	local cgroup_hint
+	local command
+
 	printf 'HOSTPID  PPID  NSPID  PID_NS  MNT_NS  NET_NS  USER_NS  UTS_NS  IPC_NS  CGROUP_NS  TIME_NS  CGROUP_HINT  COMMAND\n'
+
+	for proc_path in /proc/[0-9]*; do
+		[[ -d "$proc_path" ]] || continue
+		pid="${proc_path#/proc/}"
+
+		if ! status_values="$(status_values_for "$pid")"; then
+			if ((quiet == 0)); then
+				printf 'warning: skipped disappeared pid: %s\n' "$pid" >&2
+			fi
+			continue
+		fi
+		ppid="${status_values%%$'\n'*}"
+		nspid="${status_values##*$'\n'}"
+
+		if ! pid_ns="$(namespace_id_for "$pid" pid)" ||
+			! mnt_ns="$(namespace_id_for "$pid" mnt)" ||
+			! net_ns="$(namespace_id_for "$pid" net)" ||
+			! user_ns="$(namespace_id_for "$pid" user)" ||
+			! uts_ns="$(namespace_id_for "$pid" uts)" ||
+			! ipc_ns="$(namespace_id_for "$pid" ipc)" ||
+			! cgroup_ns="$(namespace_id_for "$pid" cgroup)" ||
+			! time_ns="$(namespace_id_for "$pid" time)"; then
+			if ((quiet == 0)); then
+				printf 'warning: skipped disappeared pid: %s\n' "$pid" >&2
+			fi
+			continue
+		fi
+
+		cgroup_hint="$(cgroup_hint_for "$pid")"
+		command="$(command_for "$pid")"
+		printf '%s  %s  %s  %s  %s  %s  %s  %s  %s  %s  %s  %s  %s\n' \
+			"$pid" "$ppid" "$nspid" "$pid_ns" "$mnt_ns" "$net_ns" "$user_ns" \
+			"$uts_ns" "$ipc_ns" "$cgroup_ns" "$time_ns" "$cgroup_hint" "$command"
+	done
 }
 
 cmd_inspect() {
