@@ -187,7 +187,32 @@ command_for() {
 }
 
 cmd_list() {
-	return 0
+	local include_host="${NSURGN_INCLUDE_HOST:-0}"
+	local proc_path
+	local pid
+	local status_values
+	local nspid
+	local command
+	local artifact_index=1
+
+	if ((include_host == 0)); then
+		return 0
+	fi
+
+	printf 'ARTIFACT  CLASSIFICATION  SCORE  LEADER  NSPID  PROCS  RUNTIME_HINT  COMMAND\n'
+
+	for proc_path in /proc/[0-9]*; do
+		[[ -d "$proc_path" ]] || continue
+		pid="${proc_path#/proc/}"
+
+		status_values="$(status_values_for "$pid")" || continue
+		nspid="${status_values##*$'\n'}"
+		command="$(command_for "$pid")"
+
+		printf 'A%s  host  0  %s  %s  1  none  %s\n' \
+			"$artifact_index" "$pid" "$nspid" "$command"
+		artifact_index=$((artifact_index + 1))
+	done
 }
 
 cmd_all() {
