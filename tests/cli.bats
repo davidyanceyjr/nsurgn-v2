@@ -22,6 +22,41 @@ captured_stderr() {
 	cat "$STDERR_FILE"
 }
 
+pid_namespace_id_for() {
+	local pid="$1"
+	local pid_ns
+
+	pid_ns="$(readlink "/proc/$pid/ns/pid" 2>/dev/null)" || return 1
+	pid_ns="${pid_ns#*[}"
+	pid_ns="${pid_ns%]}"
+	printf '%s\n' "$pid_ns"
+}
+
+find_nonhost_pid_pair() {
+	local host_pid_ns
+	local host_proc_path
+	local host_pid
+	local proc_path
+	local pid
+	local pid_ns
+
+	for host_proc_path in /proc/[0-9]*; do
+		[ -d "$host_proc_path" ] || continue
+		host_pid="${host_proc_path#/proc/}"
+		host_pid_ns="$(readlink "$host_proc_path/ns/pid" 2>/dev/null)" || continue
+		for proc_path in /proc/[0-9]*; do
+			[ -d "$proc_path" ] || continue
+			pid="${proc_path#/proc/}"
+			pid_ns="$(readlink "$proc_path/ns/pid" 2>/dev/null)" || continue
+			if [ "$pid_ns" != "$host_pid_ns" ]; then
+				printf '%s\n%s\n' "$host_pid" "$pid"
+				return 0
+			fi
+		done
+	done
+	return 1
+}
+
 @test "--help prints usage to stdout and exits 0" {
 	run run_cli --help
 
@@ -109,6 +144,41 @@ captured_stderr() {
 					exit 2
 				}
 			}
+		}
+		END {
+			exit found ? 0 : 1
+		}
+	' "$STDOUT_FILE"
+	[ "$(captured_stderr)" = "" ]
+}
+
+@test "tree prints the host pid namespace root line" {
+	host_pid_ns="$(pid_namespace_id_for "$$")"
+
+	run run_cli --quiet --host-pid "$$" tree
+
+	[ "$status" -eq 0 ]
+	[ "$(captured_stdout)" = "host pid_ns $host_pid_ns" ]
+	[ "$(captured_stderr)" = "" ]
+}
+
+@test "tree prints visible non-host pid namespace rows" {
+	pid_pair="$(find_nonhost_pid_pair)" || skip "no visible non-host PID namespace pair"
+	host_pid="${pid_pair%%$'\n'*}"
+	nonhost_pid="${pid_pair##*$'\n'}"
+	nonhost_pid_ns="$(pid_namespace_id_for "$nonhost_pid")"
+
+	run run_cli --quiet --host-pid "$host_pid" tree
+
+	[ "$status" -eq 0 ]
+	awk -v pid_ns="$nonhost_pid_ns" '
+		/^A[0-9]+[[:space:]]+pid_ns[[:space:]]/ &&
+			$3 == pid_ns &&
+			$4 == "leader" &&
+			$5 ~ /^[0-9]+$/ &&
+			$6 == "ns_pid" &&
+			$7 != "" {
+			found = 1
 		}
 		END {
 			exit found ? 0 : 1

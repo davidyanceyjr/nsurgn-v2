@@ -16,6 +16,7 @@ Usage:
 Commands:
   list
   all
+  tree
   inspect ARTIFACT_OR_PID
   cat ARTIFACT_OR_PID TARGET_PATH [--max-bytes BYTES]
   checksum ARTIFACT_OR_PID TARGET_PATH [--sha256|--sha512|--md5]
@@ -270,6 +271,90 @@ cmd_all() {
 	done
 }
 
+cmd_tree() {
+	local host_pid="${NSURGN_HOST_PID:-1}"
+	local quiet="${NSURGN_QUIET:-0}"
+	local host_pid_ns
+	local proc_path
+	local pid
+	local pid_ns
+	local status_values
+	local nspid
+	local artifact_index=1
+	local existing_pid
+	local existing_has_ns_init
+	local command
+	local namespace_order=()
+	declare -A namespace_seen=()
+	declare -A namespace_leader_pid=()
+	declare -A namespace_leader_nspid=()
+	declare -A namespace_has_ns_init=()
+	declare -A namespace_leader_command=()
+
+	if [[ ! -d "/proc/$host_pid" ]]; then
+		error "target pid not found: $host_pid"
+		return 4
+	fi
+	host_pid_ns="$(namespace_id_for "$host_pid" pid)" || {
+		error "unable to read pid namespace for host pid: $host_pid"
+		return 9
+	}
+
+	printf 'host pid_ns %s\n' "$host_pid_ns"
+
+	for proc_path in /proc/[0-9]*; do
+		[[ -d "$proc_path" ]] || continue
+		pid="${proc_path#/proc/}"
+
+		if ! pid_ns="$(namespace_id_for "$pid" pid)" ||
+			! status_values="$(status_values_for "$pid")"; then
+			if ((quiet == 0)); then
+				printf 'warning: skipped disappeared pid: %s\n' "$pid" >&2
+			fi
+			continue
+		fi
+		[[ "$pid_ns" != "$host_pid_ns" ]] || continue
+
+		nspid="${status_values##*$'\n'}"
+		command="$(command_for "$pid")"
+		if [[ -z "${namespace_seen[$pid_ns]+set}" ]]; then
+			namespace_order+=("$pid_ns")
+			namespace_seen["$pid_ns"]=1
+			namespace_leader_pid["$pid_ns"]="$pid"
+			namespace_leader_nspid["$pid_ns"]="$nspid"
+			namespace_leader_command["$pid_ns"]="$command"
+			if [[ "$nspid" == "1" ]]; then
+				namespace_has_ns_init["$pid_ns"]=1
+			else
+				namespace_has_ns_init["$pid_ns"]=0
+			fi
+			continue
+		fi
+
+		existing_pid="${namespace_leader_pid[$pid_ns]}"
+		existing_has_ns_init="${namespace_has_ns_init[$pid_ns]}"
+		if [[ "$nspid" == "1" && "$existing_has_ns_init" != "1" ]] ||
+			[[ "$existing_has_ns_init" != "1" && "$pid" -lt "$existing_pid" ]]; then
+			namespace_leader_pid["$pid_ns"]="$pid"
+			namespace_leader_nspid["$pid_ns"]="$nspid"
+			namespace_leader_command["$pid_ns"]="$command"
+			if [[ "$nspid" == "1" ]]; then
+				namespace_has_ns_init["$pid_ns"]=1
+			fi
+		fi
+	done
+
+	for pid_ns in "${namespace_order[@]}"; do
+		printf 'A%s pid_ns %s leader %s ns_pid %s %s\n' \
+			"$artifact_index" \
+			"$pid_ns" \
+			"${namespace_leader_pid[$pid_ns]}" \
+			"${namespace_leader_nspid[$pid_ns]}" \
+			"${namespace_leader_command[$pid_ns]}"
+		artifact_index=$((artifact_index + 1))
+	done
+}
+
 cmd_inspect() {
 	local target="${1-}"
 	local root
@@ -504,6 +589,9 @@ dispatch_command() {
 	all)
 		cmd_all "$@"
 		;;
+	tree)
+		cmd_tree "$@"
+		;;
 	inspect)
 		cmd_inspect "$@"
 		;;
@@ -538,6 +626,8 @@ dispatch_command() {
 nsurgn_main() {
 	local include_host=0
 	local quiet=0
+	local host_pid=1
+	local option
 
 	if (($# == 0)); then
 		usage
@@ -564,15 +654,19 @@ nsurgn_main() {
 			:
 			;;
 		--group | --format | --host-pid)
+			option="$1"
 			shift
-			require_arg "${1-}" "$1 value" || return "$?"
+			require_arg "${1-}" "$option value" || return "$?"
+			if [[ "$option" == "--host-pid" ]]; then
+				host_pid="$1"
+			fi
 			;;
 		--*)
 			error "unknown option: $1"
 			return 2
 			;;
 		*)
-			NSURGN_INCLUDE_HOST="$include_host" NSURGN_QUIET="$quiet" dispatch_command "$@"
+			NSURGN_INCLUDE_HOST="$include_host" NSURGN_QUIET="$quiet" NSURGN_HOST_PID="$host_pid" dispatch_command "$@"
 			return "$?"
 			;;
 		esac

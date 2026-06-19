@@ -2,62 +2,59 @@
 
 ## State
 
-- Branch: `feat/list-include-host-table`
-- Status: `list --include-host` implementation for the selected `lib/commands.sh` Finding is complete and committed.
-- Last completed step: Committed `feat: list host processes with include-host` (`38cc8ba`).
+- Branch: `feat/tree-nonhost-pid-namespace-rows`
+- Status: `tree` non-host PID namespace row implementation is complete and committed.
+- Last completed step: Committed `feat: print tree child pid namespaces` (`cdd96ac`).
 
 ## Selected Finding
 
-- Finding: `lib/commands.sh` had placeholder-level discovery behavior for `cmd_list`, returning success without emitting the documented `list` table when `--include-host` should include host-classified artifacts.
-- Resolution: `cmd_list` now scans visible numeric `/proc` entries when `--include-host` is set and emits host-classified one-process rows with the documented table header.
-- Scope boundary: this resolves only the `list --include-host` host row slice. It does not implement non-host artifact grouping, classification, scoring, runtime hints, or other v1 commands.
+- Finding: `doc/nsurgn.1.md` documents non-host PID namespace rows for `nsurgn tree`, but `cmd_tree` only printed the host root line.
+- Resolution: `cmd_tree` now scans visible `/proc` PIDs, groups PID namespaces that differ from the selected host PID namespace, selects one representative leader per namespace, and prints documented `A<N> pid_ns ... leader ... ns_pid ...` rows.
+- Scope boundary: this resolves only the documented PID namespace child row format. It does not implement broader artifact grouping, report changes, or unrelated command behavior.
 
 ## Changed Files
 
-- Committed:
-  - `.codex/plans/current.md`
-  - `lib/commands.sh`
-  - `tests/cli.bats`
-- Uncommitted:
-  - `.codex/handoff/session_handoff.md`
+- `.codex/plans/current.md`
+- `.codex/handoff/session_handoff.md`
+- `lib/commands.sh`
+- `tests/cli.bats`
 
 ## Verification
 
 Commands run:
 
 ```sh
-bats --filter 'list with include-host shows the current host process' tests/cli.bats
+bats --filter 'tree prints visible non-host pid namespace rows' tests/cli.bats
+bats --filter 'tree' tests/cli.bats
 shellcheck bin/* lib/*.sh tests/*.bats
 shfmt -d .
 bats tests
 ./bin/nsurgn --help
 ./bin/nsurgn --version
-./bin/nsurgn --quiet --include-host list | head -n 5
 git diff --check
 ```
 
 Results:
 
-- Passing: focused `list --include-host` Bats test; `shellcheck`; `shfmt -d .`; full `bats tests` with 22/22 tests passing; `./bin/nsurgn --help`; `./bin/nsurgn --version`; sample `list --include-host` output; `git diff --check`.
+- Passing: focused `tree` Bats filter; `shellcheck`; `shfmt -d .`; full `bats tests` with 24/24 tests passing; `./bin/nsurgn --help`; `./bin/nsurgn --version`; `git diff --check`.
+- Skipped: `tree prints visible non-host pid namespace rows` skipped on this host because no readable non-host PID namespace pair is visible to the test process.
 - Failing: None observed.
 - Not run: Pull request creation.
 
 ## Alignment
 
-- Man page: Existing `list` contract in `doc/nsurgn.1.md` already documents host-classified artifacts being included when `--include-host` is set.
-- Tests: Added acceptance coverage that `nsurgn --quiet --include-host list` emits a host-classified row for the current test process.
-- Implementation: `cmd_list` now scans numeric `/proc` entries for `--include-host` instead of returning placeholder success only.
+- Man page: Existing `tree` contract in `doc/nsurgn.1.md` already documents non-host PID namespace rows.
+- Tests: Added conditional acceptance coverage for visible non-host PID namespace rows and retained host root line coverage.
+- Implementation: `tree` now prints the host root line plus one documented child row per visible non-host PID namespace.
 
 ## Blockers
 
-- None for the selected `list --include-host` slice.
-- Broader v1 artifact grouping, non-host classification, runtime scoring, runtime hints, and additional commands remain out of scope.
+- None for the selected slice.
 
 ## Next Smallest Action
 
-- Review commit `38cc8ba` and decide whether to open a focused PR for `feat/list-include-host-table`.
+- Review commit `cdd96ac` and decide whether to open a focused PR for `feat/tree-nonhost-pid-namespace-rows`.
 
 ## Do Not Touch
 
-- Do not fold broader discovery/classification work into this branch unless explicitly requested.
-- Do not treat non-host artifacts, runtime scoring, or runtime hint detection as implemented by this slice.
+- Do not fold broader artifact grouping, report output, or file-operation behavior into this branch unless explicitly requested.
