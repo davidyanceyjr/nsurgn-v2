@@ -73,11 +73,47 @@ captured_stderr() {
 	fi
 }
 
+@test "list with include-host shows the current host process" {
+	run run_cli --quiet --include-host list
+
+	[ "$status" -eq 0 ]
+	[[ "$(captured_stdout)" == *"ARTIFACT  CLASSIFICATION  SCORE  LEADER  NSPID  PROCS  RUNTIME_HINT  COMMAND"* ]]
+	awk -v pid="$$" '
+		$4 == pid && $2 == "host" && $3 == "0" && $6 == "1" && $7 == "none" {
+			found = 1
+		}
+		END {
+			exit found ? 0 : 1
+		}
+	' "$STDOUT_FILE"
+	[ "$(captured_stderr)" = "" ]
+}
+
 @test "all prints the documented process table header and exits 0" {
 	run run_cli --quiet all
 
 	[ "$status" -eq 0 ]
 	[[ "$(captured_stdout)" == *"HOSTPID  PPID  NSPID  PID_NS  MNT_NS  NET_NS  USER_NS  UTS_NS  IPC_NS  CGROUP_NS  TIME_NS  CGROUP_HINT  COMMAND"* ]]
+	[ "$(captured_stderr)" = "" ]
+}
+
+@test "all includes the current process with namespace metadata" {
+	run run_cli --quiet all
+
+	[ "$status" -eq 0 ]
+	awk -v pid="$$" '
+		$1 == pid {
+			found = 1
+			for (field = 1; field <= 12; field++) {
+				if ($field == "") {
+					exit 2
+				}
+			}
+		}
+		END {
+			exit found ? 0 : 1
+		}
+	' "$STDOUT_FILE"
 	[ "$(captured_stderr)" = "" ]
 }
 
