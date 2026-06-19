@@ -213,6 +213,43 @@ find_nonhost_pid_pair() {
 	[[ "$(captured_stderr)" == *"hint: rerun nsurgn list"* ]]
 }
 
+@test "report for an explicit host pid prints documented artifact fields" {
+	run run_cli --quiet report --artifact "pid:$$"
+
+	[ "$status" -eq 0 ]
+	[[ "$(captured_stdout)" == *"artifact: pid:$$"* ]]
+	[[ "$(captured_stdout)" == *"classification: host"* ]]
+	[[ "$(captured_stdout)" == *"score: 0"* ]]
+	[[ "$(captured_stdout)" == *"leader host pid: $$"* ]]
+	[[ "$(captured_stdout)" == *"leader namespace pid:"* ]]
+	[[ "$(captured_stdout)" == *"runtime hint: none"* ]]
+	[[ "$(captured_stdout)" == *"container id hint: none"* ]]
+	[[ "$(captured_stdout)" == *"process count: 1"* ]]
+	[[ "$(captured_stdout)" == *"target root: /proc/$$/root"* ]]
+	[[ "$(captured_stdout)" == *"namespace IDs:"* ]]
+	[[ "$(captured_stdout)" == *"cgroup paths:"* ]]
+	[[ "$(captured_stdout)" == *"process table:"* ]]
+	[[ "$(captured_stdout)" == *"HOSTPID  NSPID  COMMAND"* ]]
+	[ "$(captured_stderr)" = "" ]
+}
+
+@test "report of a missing host pid exits 4 with stderr diagnostic" {
+	run run_cli report --artifact pid:999999999
+
+	[ "$status" -eq 4 ]
+	[ "$(captured_stdout)" = "" ]
+	[[ "$(captured_stderr)" == error:* ]]
+}
+
+@test "report of an unresolved artifact id exits 6 and suggests rerunning list" {
+	run run_cli report --artifact A9999
+
+	[ "$status" -eq 6 ]
+	[ "$(captured_stdout)" = "" ]
+	[[ "$(captured_stderr)" == *"artifact A9999"* ]]
+	[[ "$(captured_stderr)" == *"hint: rerun nsurgn list"* ]]
+}
+
 @test "relative target paths are refused before reading files" {
 	run run_cli cat "pid:$$" relative/path
 

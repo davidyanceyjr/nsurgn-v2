@@ -17,6 +17,7 @@ Commands:
   list
   all
   tree
+  report [--artifact ARTIFACT_OR_PID] [--all] [--with-mounts]
   inspect ARTIFACT_OR_PID
   cat ARTIFACT_OR_PID TARGET_PATH [--max-bytes BYTES]
   checksum ARTIFACT_OR_PID TARGET_PATH [--sha256|--sha512|--md5]
@@ -375,6 +376,104 @@ runtime hint: none
 EOF
 }
 
+cmd_report() {
+	local target=""
+	local include_all=0
+	local with_mounts=0
+	local pid
+	local root
+	local status_values
+	local nspid
+	local command
+	local namespace_name
+	local namespace_id
+	local cgroup_file
+
+	while (($#)); do
+		case "$1" in
+		--artifact)
+			shift
+			require_arg "${1-}" "ARTIFACT_OR_PID" || return "$?"
+			target="$1"
+			;;
+		--all)
+			include_all=1
+			;;
+		--with-mounts)
+			with_mounts=1
+			;;
+		*)
+			error "unknown option for report: $1"
+			return 2
+			;;
+		esac
+		shift
+	done
+
+	if [[ -z "$target" ]]; then
+		if ((include_all || with_mounts)); then
+			return 0
+		fi
+		return 0
+	fi
+
+	pid="$(parse_target_pid "$target")" || return "$?"
+	if [[ ! -d "/proc/$pid" ]]; then
+		error "target pid not found: $pid"
+		return 4
+	fi
+	root="/proc/$pid/root"
+	status_values="$(status_values_for "$pid")" || {
+		error "target pid not found: $pid"
+		return 4
+	}
+	nspid="${status_values##*$'\n'}"
+	command="$(command_for "$pid")"
+
+	cat <<EOF
+artifact: pid:$pid
+classification: host
+score: 0
+leader host pid: $pid
+leader namespace pid: $nspid
+runtime hint: none
+container id hint: none
+process count: 1
+target root: $root
+namespace IDs:
+EOF
+
+	for namespace_name in pid mnt net user uts ipc cgroup time; do
+		namespace_id="$(namespace_id_for "$pid" "$namespace_name")" || namespace_id="-"
+		printf '  %s: %s\n' "$namespace_name" "$namespace_id"
+	done
+
+	printf 'cgroup paths:\n'
+	if [[ -r "/proc/$pid/cgroup" ]]; then
+		while IFS= read -r cgroup_file; do
+			printf '  %s\n' "$cgroup_file"
+		done <"/proc/$pid/cgroup"
+	else
+		printf '  none\n'
+	fi
+
+	cat <<EOF
+process table:
+HOSTPID  NSPID  COMMAND
+$pid  $nspid  $command
+EOF
+
+	if ((with_mounts)); then
+		printf 'mount summary:\n'
+		if [[ -r "/proc/$pid/mountinfo" ]]; then
+			awk '{print "  " $5 "  " $9 "  " $10}' "/proc/$pid/mountinfo"
+		else
+			error "unable to read mountinfo for target pid: $pid"
+			return 9
+		fi
+	fi
+}
+
 cmd_exists() {
 	local target="${1-}"
 	local target_path="${2-}"
@@ -591,6 +690,9 @@ dispatch_command() {
 		;;
 	tree)
 		cmd_tree "$@"
+		;;
+	report)
+		cmd_report "$@"
 		;;
 	inspect)
 		cmd_inspect "$@"
