@@ -4,14 +4,14 @@
 
 - Work type: planning-only for the next implementation slice.
 - Current branch: `docs/plan-install-symlink-refusal`.
-- Selected slice: `fix/install-refuse-host-source-symlink`.
+- Selected slice: `fix/install-refuse-nonregular-host-source`.
 - Status: planned, not implemented.
 - Last completed branch: `fix/refuse-symlink-file-reads`.
 - Last checked: 2026-06-19.
 
 ## Slice Goal
 
-Make `nsurgn install` and its `inject` alias refuse a host source path that is a symlink, matching the documented `HOST_SRC` contract.
+Make `nsurgn install` and its `inject` alias refuse any host source path that is not a regular file, matching the documented `HOST_SRC` contract. This includes symlinks and other non-regular filesystem objects.
 
 ## Man Page Alignment
 
@@ -27,11 +27,13 @@ Make `nsurgn install` and its `inject` alias refuse a host source path that is a
 - `lib/commands.sh` `cmd_install` currently checks `[[ ! -e "$host_src" ]]` before copying.
 - `cmd_install` then runs `cp -P "$host_src" "$resolved"`.
 - With a source symlink, `cp -P` can preserve the symlink instead of refusing it, which conflicts with the documented regular-file-only contract.
+- Directories, FIFOs, devices, and other non-regular host source paths are also outside the documented `HOST_SRC` contract and need acceptance coverage if this slice adds a regular-file check.
 - Because `inject` dispatches to `cmd_install`, one implementation fix should cover both command names.
 
 ## Acceptance Tests To Add First
 
-- Add a Bats test near the existing install coverage in `tests/cli.bats`:
+- Add Bats tests near the existing install coverage in `tests/cli.bats`.
+- For `install` symlink refusal:
   - create a regular source file in `$TEST_TMPDIR`;
   - create a symlink host source pointing to that file;
   - run `run_cli install "pid:$$" "$source_link" "$target_path"`;
@@ -39,10 +41,14 @@ Make `nsurgn install` and its `inject` alias refuse a host source path that is a
   - assert target path was not created;
   - assert stdout is empty;
   - assert stderr includes a concrete diagnostic for refusing a source symlink.
-- Add either:
-  - a second focused test for `inject` using the same symlink setup, or
+- For `inject` symlink refusal, add either:
+  - a second focused test using the same symlink setup; or
   - a single parameterized/helper-based test pattern if it stays readable in Bats.
-- Run the new tests before implementation and confirm they fail because symlink sources are not refused.
+- For broader regular-file enforcement:
+  - add a test that `install` refuses a directory host source;
+  - add a test that `install` refuses one additional non-regular source, preferably a FIFO created with `mkfifo`, with a portability skip if `mkfifo` is unavailable;
+  - for each refusal, assert non-zero exit, no target creation, empty stdout, and stderr identifying the invalid host source.
+- Run the new tests before implementation and confirm they fail because the current implementation does not refuse the covered non-regular sources.
 
 ## Implementation Plan
 
@@ -52,6 +58,7 @@ Make `nsurgn install` and its `inject` alias refuse a host source path that is a
   - a dangling symlink should still be treated as a source symlink refusal if the symlink path itself exists as a symlink;
   - a non-existent ordinary path should keep the existing `source path not found` behavior.
 - Require a regular file with `[[ -f "$host_src" ]]` after the symlink check so directories, FIFOs, devices, and other non-regular sources are refused under the documented `HOST_SRC must be a regular file` contract.
+- Keep diagnostics consistent with existing CLI error style. If the tests need to require a new exact stderr string or exit code, update `doc/nsurgn.1.md` before implementation.
 - Do not change target path validation, existing-target refusal, parent-directory behavior, output format, or overwrite-related future behavior in this slice.
 
 ## Verification Plan
@@ -62,7 +69,7 @@ Run the failing-test checkpoint after adding tests:
 bats tests/cli.bats
 ```
 
-Expected checkpoint result: the new install/inject symlink-source test coverage fails against the current implementation.
+Expected checkpoint result: the new install/inject non-regular-source test coverage fails against the current implementation.
 
 Run final verification after implementation:
 
@@ -86,6 +93,6 @@ Only claim completion if the final verification passes. Preserve any environment
 
 ## Next Smallest Action
 
-- Create or switch to branch `fix/install-refuse-host-source-symlink`.
+- Create or switch to branch `fix/install-refuse-nonregular-host-source`.
 - Add the acceptance test coverage described above.
 - Run `bats tests/cli.bats` and confirm the expected failing-test checkpoint before changing implementation.
