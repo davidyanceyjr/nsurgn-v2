@@ -2,9 +2,9 @@
 
 ## State
 
-- Branch: `fix/install-refuse-nonregular-host-source`
-- Status: implementation complete, verified, and ready to merge to `main`.
-- Last completed step: committed `fix: refuse nonregular install sources`.
+- Branch: `main`
+- Status: implementation complete, verified, and merged to `main`.
+- Last completed step: merged `fix/install-refuse-nonregular-host-source`.
 
 ## Changed Files
 
@@ -42,12 +42,11 @@ Results:
 
 ## Blockers
 
-- None for merge.
+- None.
 
 ## Next Smallest Action
 
-- Merge `fix/install-refuse-nonregular-host-source` to `main`.
-- Delete the local implementation branch after merge.
+- Select the next documented behavior slice before implementation.
 
 ## Do Not Touch
 

@@ -2,10 +2,10 @@
 
 ## State
 
-- Work type: implementation completed for the selected slice.
-- Current branch: `fix/install-refuse-nonregular-host-source`.
+- Work type: implementation completed and merged for the selected slice.
+- Current branch: `main`.
 - Selected slice: `fix/install-refuse-nonregular-host-source`.
-- Status: implemented, verified, and ready to merge.
+- Status: implemented, verified, and merged.
 - Last completed branch: `fix/install-refuse-nonregular-host-source`.
 - Last checked: 2026-06-19.
 
@@ -78,5 +78,4 @@ Result: all passed. `bats tests` reported 33 tests with one existing environment
 
 ## Next Smallest Action
 
-- Merge `fix/install-refuse-nonregular-host-source` to `main`.
-- Delete the local implementation branch after merge.
+- Select the next documented behavior slice before implementation.
