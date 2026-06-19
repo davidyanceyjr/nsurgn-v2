@@ -40,14 +40,15 @@ Make `nsurgn install` and its `inject` alias refuse any host source path that is
   - assert non-zero exit;
   - assert target path was not created;
   - assert stdout is empty;
-  - assert stderr includes a concrete diagnostic for refusing a source symlink.
+  - assert stderr includes a stable substring identifying the source path as a symlink, such as `source path is a symlink`.
 - For `inject` symlink refusal, add either:
   - a second focused test using the same symlink setup; or
   - a single parameterized/helper-based test pattern if it stays readable in Bats.
 - For broader regular-file enforcement:
   - add a test that `install` refuses a directory host source;
   - add a test that `install` refuses one additional non-regular source, preferably a FIFO created with `mkfifo`, with a portability skip if `mkfifo` is unavailable;
-  - for each refusal, assert non-zero exit, no target creation, empty stdout, and stderr identifying the invalid host source.
+  - for each refusal, assert non-zero exit, no target creation, empty stdout, and stderr includes a stable substring identifying the host source as non-regular, such as `source path is not a regular file`.
+- Do not assert exact full stderr lines or exact exit codes for these new failures unless `doc/nsurgn.1.md` is updated first to make those details part of the public contract.
 - Run the new tests before implementation and confirm they fail because the current implementation does not refuse the covered non-regular sources.
 
 ## Implementation Plan
@@ -58,7 +59,8 @@ Make `nsurgn install` and its `inject` alias refuse any host source path that is
   - a dangling symlink should still be treated as a source symlink refusal if the symlink path itself exists as a symlink;
   - a non-existent ordinary path should keep the existing `source path not found` behavior.
 - Require a regular file with `[[ -f "$host_src" ]]` after the symlink check so directories, FIFOs, devices, and other non-regular sources are refused under the documented `HOST_SRC must be a regular file` contract.
-- Keep diagnostics consistent with existing CLI error style. If the tests need to require a new exact stderr string or exit code, update `doc/nsurgn.1.md` before implementation.
+- Keep diagnostics consistent with existing CLI error style, for example `error: source path is a symlink: <path>` and `error: source path is not a regular file: <path>`.
+- Use existing failure-code conventions from nearby install validation, but have tests assert only non-zero unless the man page is updated to document an exact exit status for these specific failures.
 - Do not change target path validation, existing-target refusal, parent-directory behavior, output format, or overwrite-related future behavior in this slice.
 
 ## Verification Plan
