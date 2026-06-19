@@ -28,9 +28,10 @@ idea → unlabeled plan → placeholder code → help output
 
 Exceptions require explicit user instruction or a clear note explaining why the normal workflow does not apply.
 
-## Source of Truth
+## Specification Authority
 
-The authoritative implemented interface contract is the man page:
+The authoritative project specification and user-visible interface contract is
+the man page:
 
 ```text
 doc/<tool>.1.scd
@@ -42,7 +43,11 @@ or, if the project uses Markdown man-page generation:
 doc/<tool>.1.md
 ```
 
-The man page defines the user-visible contract:
+The man page may be broad. It is allowed to describe the useful, functioning
+software the project is building, including behavior that is not implemented
+yet. That breadth is not a status claim.
+
+The man page defines the intended user-visible contract:
 
 - command names
 - subcommands
@@ -62,15 +67,21 @@ Agents must not add commands, flags, config files, output formats, dependencies,
 
 If implementation requires changing behavior, update the man page first.
 
-Future behavior may be planned in `.codex/plans/current.md` or an explicitly requested planning document. A plan may describe intended behavior that is not implemented yet, but it must clearly identify itself as planning material and must not claim that behavior is implemented, tested, or released.
+The man page is the source for planning, implementation, and testing. The
+implementation, acceptance tests, verification results, and Git history
+determine project completion.
 
-The man page may be edited as a future-version specification only when the active persistent plan explicitly says the work is specification-only. In that case, the man page must avoid claiming that the future contract is implemented, and completion of the specification does not mean completion of the software.
+Future or not-yet-implemented behavior may be documented in the man page as
+part of the project specification. Agents must distinguish specified behavior
+from implemented, tested, committed behavior when reporting status.
 
-When future behavior graduates into implementation work, update or confirm the man page contract before adding tests and code.
+When specified behavior graduates into implementation work, confirm the man
+page contract before adding acceptance tests and code.
 
 ## Planning Policy
 
-Persistent plans are allowed when they coordinate multi-session documentation and implementation work.
+Persistent plans are allowed when they coordinate single-session or
+multi-session documentation and implementation work.
 
 The default persistent plan location is:
 
@@ -85,6 +96,7 @@ A persistent plan may:
 - define documentation passes needed before tests and implementation;
 - group related future work into reviewable implementation slices;
 - reference the man page, handoff, branches, issues, and commits that will carry the work forward.
+- track the currently selected narrow implementation slice.
 
 A persistent plan must:
 
@@ -103,7 +115,10 @@ A persistent plan must not:
 - hide failing tests, skipped verification, or unresolved decisions;
 - require agents to edit unrelated files to make the plan look complete.
 
-For documentation-only specification work, the plan may direct agents to update the man page before tests exist. That is an explicit exception to the implementation loop, not evidence that the behavior works. The next implementation slice must still follow:
+For documentation-only specification work, the plan may direct agents to update
+the man page before tests exist. That is an explicit exception to the
+implementation loop, not evidence that the behavior works. The next
+implementation slice must still follow:
 
 ```text
 man page → acceptance tests → implementation → verification → review → commit
