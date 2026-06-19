@@ -99,7 +99,29 @@ Scores are integer evidence totals. Implementations must use these additive sign
 | Mountinfo contains `serviceaccount` or `projected` | 2 |
 | Executable symlink target ends with ` (deleted)` | 2 |
 
+Evidence signals are counted once per artifact unless the signal explicitly says it is counted per process. Namespace-difference signals are counted once per artifact. The `Process is PID 1 inside nested PID namespace` signal is counted once per matching process, but leader selection still selects one leader.
+
+Cgroup path, runtime hint, executable path, and mountinfo hint matching is ASCII case-sensitive. A cgroup or runtime hint contributes points once per artifact per hint token, even when multiple processes contain the same token. Mountinfo hints contribute points once per artifact per hint token, even when multiple mountinfo lines contain the same token.
+
 Runtime hints are reported as `k8s`, `containerd`, `docker`, `crio`, `libpod`, `lxc`, `systemd`, or `none`. Multiple hints are joined with `/` in first-match order from that list.
+
+`--no-runtime-hints` disables cgroup path hint scoring, runtime hint labels, container ID hint scoring, and runtime-derived `container-ish` classification. Namespace, rootfs, executable, and mountinfo evidence still apply. With `--no-runtime-hints`, runtime hint output is `none`.
+
+`--no-mount-scan` prevents discovery from reading `/proc/<pid>/mountinfo` and disables mountinfo-derived scoring and classification evidence during discovery. It does not prevent commands that explicitly inspect mounts, such as `mounts` or `report --with-mounts`, from reading the selected leader mountinfo.
+
+A weakly classified artifact for `signal` safeguards is any artifact classified as `suspicious` or `isolated` with a score below 6. High-impact signals to weakly classified artifacts require `--force`.
+
+## FILE OPERATION SEMANTICS
+
+`install`, `inject`, `extract`, and `exe --extract` copy regular file contents only unless a command explicitly documents symlink behavior. Directory copies are not supported by these commands.
+
+Default copy behavior does not preserve owner, group, mode, timestamps, extended attributes, ACLs, or other metadata beyond what normal file creation applies. `install --mode MODE` sets the destination mode after copying. `install --owner UID` sets the destination owner after copying. `install --group GID` sets the destination group after copying. `extract --preserve` preserves mode and timestamps when the platform copy command supports them. It does not preserve owner, group, extended attributes, or ACLs.
+
+Existing destinations are refused unless `--overwrite` is set. Overwrite behavior removes the destination path first, then creates the replacement at the same path. It does not truncate in place. `--backup` is valid only with `--overwrite`. A backup path is `<destination>.nsurgn.bak`. If the backup path already exists, the operation fails before copying.
+
+Parent directories are never created unless `install --parents` is set. `install --parents` creates missing parent directories with mode `0755`, subject to process umask.
+
+If a source file changes during copy, `nsurgn` fails with exit 8 when it detects the change. If the change is not detectable, the operation is subject to the live-filesystem limitation. If the leader process disappears, the target root becomes inaccessible, or the resolved source or destination changes type during an operation, `nsurgn` exits 8.
 
 ## COMMANDS
 
@@ -223,7 +245,7 @@ When the executable path is deleted, stdout appends ` (deleted)` and stderr incl
 
 `warning: executable path has been deleted`
 
-With `--extract`, copies the bytes exposed by `/proc/<leader-pid>/exe` to HOST_DEST. Existing HOST_DEST paths are refused unless `--overwrite` is set.
+With `--extract`, copies the regular-file bytes exposed by `/proc/<leader-pid>/exe` to HOST_DEST. Existing HOST_DEST paths are refused unless `--overwrite` is set.
 
 ### `install`
 
@@ -233,7 +255,9 @@ Copies HOST_SRC from the host into the artifact target root at TARGET_PATH. HOST
 
 TARGET_PATH must be absolute. Relative paths, empty paths, `.` and `..` components, and traversal attempts are refused before copying.
 
-The parent directory must already exist unless `--parents` is set. Existing targets are refused unless `--overwrite` is set. `--backup` writes a sibling backup before overwrite using the suffix `.nsurgn.bak`.
+The parent directory must already exist unless `--parents` is set. Existing targets are refused unless `--overwrite` is set. `--backup` is valid only with `--overwrite` and writes a sibling backup before overwrite using the suffix `.nsurgn.bak`.
+
+HOST_SRC must be a regular file. Host source symlinks are refused. If symlink install support is added later, it must be specified as a new documented option before implementation.
 
 On success, stdout is:
 
@@ -251,7 +275,7 @@ Alias for `install`. It copies host files into the artifact root filesystem. It 
 
 Copies TARGET_PATH from the artifact target root to HOST_DEST on the host. The artifact source is not removed.
 
-TARGET_PATH must be absolute. HOST_DEST is refused when it exists unless `--overwrite` is set. The default symlink behavior is `--no-dereference`, which copies symlinks as symlinks when the platform copy command supports it.
+TARGET_PATH must be absolute. HOST_DEST is refused when it exists unless `--overwrite` is set. The default symlink behavior is `--no-dereference`, which copies a source symlink as a symlink. The copied symlink target text is unchanged. `--dereference` copies the referent bytes and refuses dangling symlinks.
 
 On success, stdout is:
 
@@ -271,7 +295,7 @@ The following target paths are always refused:
 
 `/`, `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/proc`, `/sys`, `/dev`, `/run`
 
-Mount points are refused.
+Mount points are refused, including recursive removal.
 
 On success, stdout is:
 
@@ -303,13 +327,13 @@ Lists TARGET_PATH inside the artifact target root. TARGET_PATH must be absolute.
 
 `nsurgn cat` ARTIFACT_OR_PID TARGET_PATH [`--max-bytes` BYTES]
 
-Writes file contents from TARGET_PATH inside the artifact target root to stdout. Directories are refused. When `--max-bytes` is set, at most BYTES bytes are written.
+Writes file contents from TARGET_PATH inside the artifact target root to stdout. Directories and symlinks are refused. When `--max-bytes` is set, at most BYTES bytes are written.
 
 ### `stat`
 
 `nsurgn stat` ARTIFACT_OR_PID TARGET_PATH
 
-Prints metadata for TARGET_PATH inside the artifact target root. Stdout includes:
+Prints metadata for TARGET_PATH inside the artifact target root. `stat` uses symlink metadata and does not follow symlinks. Stdout includes:
 
 - artifact ID
 - original target path
@@ -333,7 +357,7 @@ Exit status is 0 when the path exists, 1 when the path does not exist, and 2 for
 
 `nsurgn checksum` ARTIFACT_OR_PID TARGET_PATH [`--sha256`|`--sha512`|`--md5`]
 
-Writes a checksum for TARGET_PATH inside the artifact target root. The default algorithm is SHA-256. `--md5` is supported only as a legacy non-cryptographic checksum.
+Writes a checksum for TARGET_PATH inside the artifact target root. Directories and symlinks are refused. The default algorithm is SHA-256. `--md5` is supported only as a legacy non-cryptographic checksum.
 
 Stdout format is:
 
@@ -375,7 +399,7 @@ The command exits 9 when `nsenter` is missing or when the installed `nsenter` do
 : Include host-classified artifacts in discovery output and allow host-classified targets to be selected for read-only commands.
 
 `--no-runtime-hints`
-: Disable runtime and cgroup hint scoring. Namespace IDs are still used.
+: Disable cgroup path hint scoring, runtime hint labels, container ID hint scoring, and runtime-derived `container-ish` classification. Namespace, rootfs, executable, and mountinfo evidence still apply. Runtime hint output is `none`.
 
 `--no-mount-scan`
 : Do not read `/proc/<pid>/mountinfo` during discovery. Commands that directly inspect mounts still read the selected leader mountinfo.
@@ -490,7 +514,7 @@ Common diagnostics include:
 : Leader executable symlink and executable extraction source.
 
 `/proc/<pid>/mountinfo`
-: Mount metadata for scoring, reports, and `mounts`.
+: Mount metadata for scoring, reports, and `mounts`. Discovery does not read this file when `--no-mount-scan` is set.
 
 `nsurgn` does not read or write a configuration file.
 
@@ -564,11 +588,9 @@ Only `enter` uses `nsenter` to execute a command in selected namespaces. `nsurgn
 
 ## UNRESOLVED BEHAVIOR
 
-The initial acceptance tests must resolve the exact table spacing for human-readable table output.
+The v1 specification must decide the exact table spacing for human-readable table output before acceptance tests are written for table output.
 
-The initial acceptance tests must resolve whether file-copy metadata preservation is limited to the documented `--mode`, `--owner`, `--group`, and `--preserve` flags or whether platform copy defaults are allowed to vary.
-
-The initial acceptance tests must resolve the exact stdout format for `ls` directory entries and `stat` metadata fields.
+The v1 specification must decide the exact stdout format for `ls` directory entries and `stat` metadata fields before acceptance tests are written for those commands.
 
 ## BUGS
 
