@@ -88,6 +88,17 @@ validate_target_path() {
 	fi
 }
 
+refuse_protected_remove_path() {
+	local path="$1"
+
+	case "$path" in
+	/ | /etc | /usr | /bin | /sbin | /lib | /lib64 | /proc | /sys | /dev | /run)
+		error "refusing protected path: $path"
+		return 5
+		;;
+	esac
+}
+
 resolve_target_path() {
 	local target="$1"
 	local path="$2"
@@ -298,6 +309,7 @@ cmd_remove() {
 		error "remove requires --force"
 		return 2
 	fi
+	refuse_protected_remove_path "$target_path" || return "$?"
 	resolved="$(resolve_target_path "$target" "$target_path")" || return "$?"
 	if [[ ! -e "$resolved" && ! -L "$resolved" ]]; then
 		error "target path not found: $target_path"

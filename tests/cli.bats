@@ -199,6 +199,14 @@ captured_stderr() {
 	[ "$(captured_stderr)" = "" ]
 }
 
+@test "remove with --force refuses protected target paths" {
+	run run_cli remove "pid:$$" /etc --force
+
+	[ "$status" -eq 5 ]
+	[ "$(captured_stdout)" = "" ]
+	[[ "$(captured_stderr)" == *"error: refusing protected path: /etc"* ]]
+}
+
 @test "enter without required separator exits 2 with stderr diagnostic" {
 	run run_cli enter "pid:$$" /bin/true
 
