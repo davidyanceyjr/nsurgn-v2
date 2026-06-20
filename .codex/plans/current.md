@@ -213,12 +213,10 @@ fix: require recursive remove for directories
 
 ## Expected Changed Files
 
-- `.codex/plans/current.md`
-- `doc/nsurgn.1.md`
 - `tests/cli.bats`
 - `lib/commands.sh`
 
-After this planning review, `doc/nsurgn.1.md` should remain unchanged unless the documented contract is intentionally adjusted before tests.
+After this planning review, `.codex/plans/current.md` should change only for status updates, and `doc/nsurgn.1.md` should remain unchanged unless the documented contract is intentionally adjusted before tests.
 
 ## Do Not Touch
 
