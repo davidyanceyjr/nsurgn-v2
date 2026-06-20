@@ -291,11 +291,11 @@ TARGET_PATH must be absolute. Relative paths, empty paths, `.` and `..` componen
 
 Directory removal requires `--recursive`.
 
+Recursive directory removal refuses any mount point at or under TARGET_PATH before deletion. Recursive directory removal requires GNU/coreutils-compatible `rm` support for `--one-file-system`.
+
 The following target paths are always refused:
 
 `/`, `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/proc`, `/sys`, `/dev`, `/run`
-
-Mount points are refused, including recursive removal.
 
 On success, stdout is:
 
@@ -455,6 +455,12 @@ Common diagnostics include:
 
 `error: remove requires --force`
 
+`error: directory removal requires --recursive: <resolved-target>`
+
+`error: refusing mount point: <resolved-target>`
+
+`error: recursive removal requires GNU rm with --one-file-system`
+
 `error: artifact <id> no longer exists in current scan`
 
 `hint: rerun nsurgn list`
@@ -514,7 +520,7 @@ Common diagnostics include:
 : Leader executable symlink and executable extraction source.
 
 `/proc/<pid>/mountinfo`
-: Mount metadata for scoring, reports, and `mounts`. Discovery does not read this file when `--no-mount-scan` is set.
+: Mount metadata for scoring, reports, `mounts`, and recursive `remove` mount-point refusal. Discovery does not read this file when `--no-mount-scan` is set.
 
 `nsurgn` does not read or write a configuration file.
 
