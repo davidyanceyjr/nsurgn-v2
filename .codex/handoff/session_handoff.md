@@ -50,12 +50,6 @@ Results:
 
 ## Future Implementation Slice Candidates
 
-- `fix/remove-directory-recursive-guard`
-  - Status: not implemented.
-  - Contract source: `doc/nsurgn.1.md` documents `nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]` and says directory removal requires `--recursive`.
-  - Current gap: `cmd_remove` parses `--force` but not `--recursive`.
-  - First action: add Bats coverage that `remove --force` refuses a directory without `--recursive` and leaves it in place.
-
 - `feat/extract-overwrite-option`
   - Status: not implemented.
   - Contract source: `doc/nsurgn.1.md` documents `extract --overwrite|--no-overwrite`.
