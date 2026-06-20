@@ -5,7 +5,7 @@
 - Work type: mixed coordination for one implementation slice.
 - Active slice: `fix/remove-directory-recursive-guard`.
 - Planned implementation branch: `fix/remove-directory-recursive-guard`.
-- Status: selected for planning; tests and implementation not started.
+- Status: selected for implementation planning; man-page exit-code mappings are documented, tests and implementation not started.
 - Last handoff: `.codex/handoff/session_handoff.md`.
 - Last completed branch: `fix/install-refuse-nonregular-host-source`.
 - Last checked: 2026-06-20.
@@ -59,11 +59,17 @@ Out of scope for this slice:
 - Race-specific exit `8` handling unless the man page and acceptance tests are tightened first.
 - Install, extract, inject, cat, checksum, exists, ls, stat, signal, or enter behavior.
 
-## Man Page Updates Before Tests
+## Man Page Status Before Tests
 
-Update `doc/nsurgn.1.md` before adding acceptance tests:
+`doc/nsurgn.1.md` documents the behavior needed for this slice:
 
-- In `STDERR`, add exact diagnostics:
+- Command synopsis: `nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]`.
+- Directory removal requires `--recursive`.
+- Recursive directory removal refuses any mount point at or under TARGET_PATH before deletion.
+- Recursive directory removal requires GNU/coreutils-compatible `rm` support for `--one-file-system`.
+- Directory removal without `--recursive`, target mount-point refusal, and nested mount-point refusal exit `5`.
+- Unsupported recursive removal because GNU/coreutils-compatible `rm --one-file-system` is unavailable exits `9`.
+- `STDERR` includes the exact diagnostics:
 
 ```text
 error: directory removal requires --recursive: <resolved-target>
@@ -71,14 +77,9 @@ error: refusing mount point: <resolved-target>
 error: recursive removal requires GNU rm with --one-file-system
 ```
 
-- Confirm exit status `5` is the exact status for directory refusal because exit `5` already means unsafe path refused.
-- Confirm exit status `5` is the exact status for target and nested mount-point refusal because exit `5` already means unsafe path refused.
-- Confirm exit status `9` is the exact status for unsupported recursive removal because exit `9` already covers unsupported platform or missing command-specific dependency.
-- Remove or replace broad wording that says all mount points are refused unless this slice expands to test and implement non-recursive mount-point-specific refusal.
-- In `FILES` or the relevant command text, document that recursive removal requires GNU/coreutils-compatible `rm` support for `--one-file-system`.
-- Keep the `remove` command contract as `nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]`.
+- `FILES` documents `/proc/<pid>/mountinfo` for recursive `remove` mount-point refusal.
 
-This documentation step may be a first commit on `fix/remove-directory-recursive-guard` or a separate focused documentation branch such as `docs/remove-directory-recursive-diagnostics`. Either way, it must land before tests that assert these diagnostics.
+No further man-page change is required before adding acceptance tests unless the implementation slice changes the documented contract. The next action is plan review, then create or switch to `fix/remove-directory-recursive-guard` and add failing acceptance tests for the documented behavior.
 
 ## Planned Test Changes
 
@@ -187,7 +188,7 @@ Do not add a new source file, framework, dependency abstraction, architecture do
 Follow the repository loop:
 
 1. Create or switch to `fix/remove-directory-recursive-guard`.
-2. Add exact man page diagnostics before tests.
+2. Confirm the reviewed man-page contract still matches the selected slice.
 3. Add acceptance tests.
 4. Run `bats tests/cli.bats` and confirm the new tests fail for the expected reason.
 5. Implement only enough code to pass the tests.
@@ -216,6 +217,8 @@ fix: require recursive remove for directories
 - `doc/nsurgn.1.md`
 - `tests/cli.bats`
 - `lib/commands.sh`
+
+After this planning review, `doc/nsurgn.1.md` should remain unchanged unless the documented contract is intentionally adjusted before tests.
 
 ## Do Not Touch
 

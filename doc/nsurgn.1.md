@@ -293,6 +293,8 @@ Directory removal requires `--recursive`.
 
 Recursive directory removal refuses any mount point at or under TARGET_PATH before deletion. Recursive directory removal requires GNU/coreutils-compatible `rm` support for `--one-file-system`.
 
+Directory removal without `--recursive`, target mount-point refusal, and nested mount-point refusal exit 5. Unsupported recursive removal because GNU/coreutils-compatible `rm --one-file-system` is unavailable exits 9.
+
 The following target paths are always refused:
 
 `/`, `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/proc`, `/sys`, `/dev`, `/run`
