@@ -10,6 +10,20 @@ Optional dependency for namespace entry: `nsenter`
 
 ---
 
+## Document Status
+
+This file is a v1 concept and application specification. It is not the current
+operation manual and it is not a completion claim for the current executable.
+
+For current user operation, read `README.md` and `doc/nsurgn.1.md`.
+
+The current `0.1.0` executable implements a tested subset of this specification:
+`list`, `all`, `tree`, `report`, `inspect`, `exists`, `cat`, `checksum`,
+`extract`, `install`, `inject`, `remove`, and `enter` argument validation.
+
+Commands and options in this specification that are not covered by the current
+acceptance tests remain intended v1 behavior until implemented and verified.
+
 ## 1. Executive Summary
 
 `nsurgn` is a Linux-native command-line utility for discovering, inspecting, and operating on **namespace artifacts**: groups of Linux processes related by shared namespace membership, cgroup paths, root filesystem views, mount metadata, process relationships, and supporting `/proc` metadata.
@@ -22,7 +36,7 @@ The tool is designed for situations where Docker, Podman, Kubernetes, containerd
 
 `nsurgn` does **not** claim to detect containers as kernel objects. It detects namespace-related process artifacts and classifies some as **container-ish** when namespace isolation and runtime metadata strongly suggest container-like execution.
 
-First-release capabilities include:
+Intended first-release capabilities include:
 
 - Discovering namespace-isolated, container-ish, and suspicious artifacts.
 - Listing probable artifact leaders.

@@ -30,6 +30,34 @@ File operations resolve artifact paths through the leader root:
 
 Only `enter` runs a command through `nsenter`. No other command executes a program inside the artifact.
 
+## CURRENT IMPLEMENTATION STATUS
+
+This man page is the v1 command contract. The current `0.1.0` executable implements a tested subset of that contract.
+
+Implemented commands in this checkout:
+
+- `list`
+- `all`
+- `tree`
+- `report`
+- `inspect`
+- `exists`
+- `cat`
+- `checksum`
+- `extract`
+- `install`
+- `inject`
+- `remove`
+- `enter` argument validation only
+
+Commands documented below but not currently implemented are `scout`, `map`, `ps`, `mounts`, `exe`, `signal`, `ls`, and `stat`. They return an unknown-command error in the current executable.
+
+`enter` currently validates that the required `--` separator is present. Namespace command execution through `nsenter` is specified below but not implemented in the current executable.
+
+The global options `--quiet`, `--include-host`, and `--host-pid` affect current behavior. The options `--group`, `--format`, `--verbose`, `--no-color`, `--no-runtime-hints`, and `--no-mount-scan` are accepted by the current parser but their full documented behavior is not implemented yet.
+
+The repository root `README.md` provides a current-operation How-To. This man page remains the detailed command contract.
+
 ## ARTIFACT GROUPING
 
 `--group profile` is the default. It groups processes by this namespace tuple:
@@ -124,6 +152,8 @@ Parent directories are never created unless `install --parents` is set. `install
 If a source file changes during copy, `nsurgn` fails with exit 8 when it detects the change. If the change is not detectable, the operation is subject to the live-filesystem limitation. If the leader process disappears, the target root becomes inaccessible, or the resolved source or destination changes type during an operation, `nsurgn` exits 8.
 
 ## COMMANDS
+
+Unless noted in `CURRENT IMPLEMENTATION STATUS`, command descriptions in this section specify the v1 contract. A command or option is not complete until it is implemented and covered by acceptance tests.
 
 ### `list`
 
