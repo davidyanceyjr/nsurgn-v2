@@ -63,6 +63,7 @@ find_nonhost_pid_pair() {
 	[ "$status" -eq 0 ]
 	[[ "$(captured_stdout)" == *"nsurgn"* ]]
 	[[ "$(captured_stdout)" == *"list"* ]]
+	[[ "$(captured_stdout)" == *"remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]"* ]]
 	[ "$(captured_stderr)" = "" ]
 }
 
@@ -421,6 +422,22 @@ find_nonhost_pid_pair() {
 	[ ! -e "$target_path" ]
 	[[ "$(captured_stdout)" == "removed: "* ]]
 	[ "$(captured_stderr)" = "" ]
+}
+
+@test "remove with --force refuses a directory without --recursive" {
+	target_path="$TEST_TMPDIR/remove-dir"
+	resolved_path="/proc/$$/root$target_path"
+	mkdir "$target_path"
+	printf 'keep me\n' >"$target_path/child.txt"
+
+	run run_cli remove "pid:$$" "$target_path" --force
+
+	[ "$status" -eq 5 ]
+	[ -d "$target_path" ]
+	[ -f "$target_path/child.txt" ]
+	[ "$(cat "$target_path/child.txt")" = "keep me" ]
+	[ "$(captured_stdout)" = "" ]
+	[[ "$(captured_stderr)" == *"error: directory removal requires --recursive: $resolved_path"* ]]
 }
 
 @test "remove with --force refuses protected target paths" {

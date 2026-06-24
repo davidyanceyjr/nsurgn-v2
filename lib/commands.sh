@@ -24,7 +24,7 @@ Commands:
   exists ARTIFACT_OR_PID TARGET_PATH
   extract ARTIFACT_OR_PID TARGET_PATH HOST_DEST
   install ARTIFACT_OR_PID HOST_SRC TARGET_PATH
-  remove ARTIFACT_OR_PID TARGET_PATH --force
+  remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]
   enter ARTIFACT_OR_PID [OPTIONS] -- COMMAND [ARGS...]
 EOF
 }
@@ -640,6 +640,7 @@ cmd_remove() {
 	local target="${1-}"
 	local target_path="${2-}"
 	local force=0
+	local recursive=0
 	local resolved
 
 	require_arg "$target" "ARTIFACT_OR_PID" || return "$?"
@@ -649,6 +650,9 @@ cmd_remove() {
 		case "$1" in
 		--force)
 			force=1
+			;;
+		--recursive)
+			recursive=1
 			;;
 		*)
 			error "unknown option for remove: $1"
@@ -667,6 +671,10 @@ cmd_remove() {
 	if [[ ! -e "$resolved" && ! -L "$resolved" ]]; then
 		error "target path not found: $target_path"
 		return 4
+	fi
+	if [[ -d "$resolved" && ! -L "$resolved" && "$recursive" -eq 0 ]]; then
+		error "directory removal requires --recursive: $resolved"
+		return 5
 	fi
 	rm -- "$resolved"
 	printf 'removed: %s\n' "$resolved"
