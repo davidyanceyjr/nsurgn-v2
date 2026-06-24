@@ -24,7 +24,7 @@ Commands:
   exists ARTIFACT_OR_PID TARGET_PATH
   extract ARTIFACT_OR_PID TARGET_PATH HOST_DEST
   install ARTIFACT_OR_PID HOST_SRC TARGET_PATH
-  remove ARTIFACT_OR_PID TARGET_PATH --force
+  remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]
   enter ARTIFACT_OR_PID [OPTIONS] -- COMMAND [ARGS...]
 EOF
 }
@@ -99,6 +99,57 @@ refuse_protected_remove_path() {
 		return 5
 		;;
 	esac
+}
+
+rm_supports_one_file_system() {
+	rm --help 2>/dev/null | grep -q -- '--one-file-system'
+}
+
+normalize_artifact_path_for_mountinfo() {
+	local path="$1"
+
+	while [[ "$path" == *"//"* ]]; do
+		path="${path//\/\//\/}"
+	done
+	while [[ "$path" != "/" && "$path" == */ ]]; do
+		path="${path%/}"
+	done
+	if [[ -z "$path" ]]; then
+		path="/"
+	fi
+	printf '%s\n' "$path"
+}
+
+decode_mountinfo_path() {
+	printf '%b\n' "$1"
+}
+
+mount_points_under_target() {
+	local target="$1"
+	local mountinfo_file="$2"
+	local normalized_target
+	local encoded_mount_point
+	local mount_point
+	local normalized_mount_point
+
+	normalized_target="$(normalize_artifact_path_for_mountinfo "$target")"
+	awk '{print $5}' "$mountinfo_file" | while IFS= read -r encoded_mount_point; do
+		mount_point="$(decode_mountinfo_path "$encoded_mount_point")"
+		normalized_mount_point="$(normalize_artifact_path_for_mountinfo "$mount_point")"
+		if [[ "$normalized_mount_point" == "$normalized_target" ||
+			"$normalized_mount_point" == "$normalized_target"/* ]]; then
+			printf '%s\n' "$normalized_mount_point"
+		fi
+	done
+}
+
+procfs_path_for_artifact_path() {
+	local root="$1"
+	local artifact_path="$2"
+	local normalized_artifact_path
+
+	normalized_artifact_path="$(normalize_artifact_path_for_mountinfo "$artifact_path")"
+	printf '%s/%s\n' "${root%/}" "${normalized_artifact_path#/}"
 }
 
 resolve_target_path() {
@@ -640,7 +691,13 @@ cmd_remove() {
 	local target="${1-}"
 	local target_path="${2-}"
 	local force=0
+	local recursive=0
 	local resolved
+	local pid
+	local root
+	local mountinfo_file
+	local refused_mount_point
+	local refused_resolved
 
 	require_arg "$target" "ARTIFACT_OR_PID" || return "$?"
 	require_arg "$target_path" "TARGET_PATH" || return "$?"
@@ -649,6 +706,9 @@ cmd_remove() {
 		case "$1" in
 		--force)
 			force=1
+			;;
+		--recursive)
+			recursive=1
 			;;
 		*)
 			error "unknown option for remove: $1"
@@ -667,6 +727,32 @@ cmd_remove() {
 	if [[ ! -e "$resolved" && ! -L "$resolved" ]]; then
 		error "target path not found: $target_path"
 		return 4
+	fi
+	if [[ -d "$resolved" && ! -L "$resolved" && "$recursive" -eq 0 ]]; then
+		error "directory removal requires --recursive: $resolved"
+		return 5
+	fi
+	if [[ -d "$resolved" && ! -L "$resolved" && "$recursive" -eq 1 ]]; then
+		if ! rm_supports_one_file_system; then
+			error "recursive removal requires GNU rm with --one-file-system"
+			return 9
+		fi
+		pid="$(parse_target_pid "$target")" || return "$?"
+		root="/proc/$pid/root"
+		mountinfo_file="/proc/$pid/mountinfo"
+		if [[ ! -r "$mountinfo_file" ]]; then
+			error "unable to read mountinfo for target pid: $pid"
+			return 9
+		fi
+		refused_mount_point="$(mount_points_under_target "$target_path" "$mountinfo_file" | head -n 1)"
+		if [[ -n "$refused_mount_point" ]]; then
+			refused_resolved="$(procfs_path_for_artifact_path "$root" "$refused_mount_point")"
+			error "refusing mount point: $refused_resolved"
+			return 5
+		fi
+		rm -r --one-file-system -- "$resolved"
+		printf 'removed: %s\n' "$resolved"
+		return 0
 	fi
 	rm -- "$resolved"
 	printf 'removed: %s\n' "$resolved"
