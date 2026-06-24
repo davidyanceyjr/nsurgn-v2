@@ -693,6 +693,11 @@ cmd_remove() {
 	local force=0
 	local recursive=0
 	local resolved
+	local pid
+	local root
+	local mountinfo_file
+	local refused_mount_point
+	local refused_resolved
 
 	require_arg "$target" "ARTIFACT_OR_PID" || return "$?"
 	require_arg "$target_path" "TARGET_PATH" || return "$?"
@@ -732,6 +737,22 @@ cmd_remove() {
 			error "recursive removal requires GNU rm with --one-file-system"
 			return 9
 		fi
+		pid="$(parse_target_pid "$target")" || return "$?"
+		root="/proc/$pid/root"
+		mountinfo_file="/proc/$pid/mountinfo"
+		if [[ ! -r "$mountinfo_file" ]]; then
+			error "unable to read mountinfo for target pid: $pid"
+			return 9
+		fi
+		refused_mount_point="$(mount_points_under_target "$target_path" "$mountinfo_file" | head -n 1)"
+		if [[ -n "$refused_mount_point" ]]; then
+			refused_resolved="$(procfs_path_for_artifact_path "$root" "$refused_mount_point")"
+			error "refusing mount point: $refused_resolved"
+			return 5
+		fi
+		rm -r --one-file-system -- "$resolved"
+		printf 'removed: %s\n' "$resolved"
+		return 0
 	fi
 	rm -- "$resolved"
 	printf 'removed: %s\n' "$resolved"

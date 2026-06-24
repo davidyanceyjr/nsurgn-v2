@@ -4,9 +4,17 @@ setup() {
 	TEST_TMPDIR="$(mktemp -d)"
 	STDOUT_FILE="$TEST_TMPDIR/stdout"
 	STDERR_FILE="$TEST_TMPDIR/stderr"
+	TEST_MOUNTS=()
 }
 
 teardown() {
+	local mount_point
+
+	for mount_point in "${TEST_MOUNTS[@]}"; do
+		if mountpoint -q "$mount_point"; then
+			umount "$mount_point" 2>/dev/null || true
+		fi
+	done
 	rm -rf "$TEST_TMPDIR"
 }
 
@@ -20,6 +28,19 @@ captured_stdout() {
 
 captured_stderr() {
 	cat "$STDERR_FILE"
+}
+
+bind_mount_or_skip() {
+	local source_path="$1"
+	local mount_point="$2"
+
+	if ! command -v mount >/dev/null 2>&1 || ! command -v umount >/dev/null 2>&1 || ! command -v mountpoint >/dev/null 2>&1; then
+		skip "bind mount tools unavailable"
+	fi
+	if ! mount --bind "$source_path" "$mount_point" 2>/dev/null; then
+		skip "temporary bind mounts unavailable"
+	fi
+	TEST_MOUNTS+=("$mount_point")
 }
 
 pid_namespace_id_for() {
@@ -471,6 +492,61 @@ EOF
 	[ "$output" = "" ]
 	[ "$(captured_stdout)" = "" ]
 	[ "$(captured_stderr)" = "error: recursive removal requires GNU rm with --one-file-system" ]
+}
+
+@test "remove with --force --recursive deletes an ordinary directory" {
+	target_path="$TEST_TMPDIR/remove-dir-recursive"
+	resolved_path="/proc/$$/root$target_path"
+	mkdir "$target_path"
+	printf 'delete me\n' >"$target_path/child.txt"
+
+	run run_cli remove "pid:$$" "$target_path" --force --recursive
+
+	[ "$status" -eq 0 ]
+	[ ! -e "$target_path" ]
+	[ "$(captured_stdout)" = "removed: $resolved_path" ]
+	[ "$(captured_stderr)" = "" ]
+}
+
+@test "remove with --force --recursive refuses a target mount point" {
+	source_path="$TEST_TMPDIR/source-mount"
+	target_path="$TEST_TMPDIR/remove-target-mount"
+	resolved_path="/proc/$$/root$target_path"
+	mkdir "$source_path" "$target_path"
+	printf 'keep source\n' >"$source_path/mounted.txt"
+	printf 'keep target\n' >"$target_path/target.txt"
+	bind_mount_or_skip "$source_path" "$target_path"
+
+	run run_cli remove "pid:$$" "$target_path" --force --recursive
+
+	[ "$status" -eq 5 ]
+	[ -d "$target_path" ]
+	[ -f "$target_path/mounted.txt" ]
+	[ "$(cat "$target_path/mounted.txt")" = "keep source" ]
+	[ "$(captured_stdout)" = "" ]
+	[ "$(captured_stderr)" = "error: refusing mount point: $resolved_path" ]
+}
+
+@test "remove with --force --recursive refuses a nested mount point" {
+	source_path="$TEST_TMPDIR/source-nested-mount"
+	target_path="$TEST_TMPDIR/remove-nested-mount"
+	nested_path="$target_path/nested"
+	resolved_nested_path="/proc/$$/root$nested_path"
+	mkdir "$source_path" "$target_path" "$nested_path"
+	printf 'keep ordinary\n' >"$target_path/ordinary.txt"
+	printf 'keep mounted\n' >"$source_path/mounted.txt"
+	bind_mount_or_skip "$source_path" "$nested_path"
+
+	run run_cli remove "pid:$$" "$target_path" --force --recursive
+
+	[ "$status" -eq 5 ]
+	[ -d "$target_path" ]
+	[ -f "$target_path/ordinary.txt" ]
+	[ -d "$nested_path" ]
+	[ -f "$nested_path/mounted.txt" ]
+	[ "$(cat "$nested_path/mounted.txt")" = "keep mounted" ]
+	[ "$(captured_stdout)" = "" ]
+	[ "$(captured_stderr)" = "error: refusing mount point: $resolved_nested_path" ]
 }
 
 @test "remove with --force removes a symlink to a directory without --recursive" {

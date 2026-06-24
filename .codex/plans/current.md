@@ -5,10 +5,10 @@
 - Work type: mixed coordination and implementation work.
 - Target implementation branch: `fix/remove-directory-recursive-guard`.
 - Target behavior: execute `nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force --recursive` for real directories while preserving documented destructive-operation safeguards.
-- Status: Slices 1, 2, and 3 are implemented and verified on `fix/remove-directory-recursive-guard`; later slices have not started.
+- Status: Slices 1, 2, 3, and 4 are implemented and verified on `fix/remove-directory-recursive-guard`; Slice 5 has not started.
 - Last checked: 2026-06-24.
-- Current repo state: `main` contains the documented `remove --recursive` contract. On `fix/remove-directory-recursive-guard`, Slice 1 exposes `--recursive` in help, parses it, and refuses real directories without `--recursive`. Slice 2 adds regression coverage for symlink-to-directory and broken-symlink removal semantics without production code changes. Slice 3 adds the unsupported `rm --one-file-system` guard before recursive directory deletion and fixture-tested mountinfo path matching helpers.
-- Next implementation slice: Slice 4, mount-point refusal and successful recursive directory removal.
+- Current repo state: `main` contains the documented `remove --recursive` contract. On `fix/remove-directory-recursive-guard`, Slice 1 exposes `--recursive` in help, parses it, and refuses real directories without `--recursive`. Slice 2 adds regression coverage for symlink-to-directory and broken-symlink removal semantics without production code changes. Slice 3 adds the unsupported `rm --one-file-system` guard before recursive directory deletion and fixture-tested mountinfo path matching helpers. Slice 4 removes ordinary real directories with `rm -r --one-file-system` after refusing mount points at or under the target using `/proc/<leader-pid>/mountinfo`.
+- Next implementation slice: Slice 5, final verification and branch handoff.
 
 This file is the active coordination plan. There is no separate findings file for this slice.
 
@@ -38,7 +38,7 @@ nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]
 - Slice 1 resolved: `cmd_remove` parses `--force` and `--recursive`.
 - `cmd_remove` checks GNU/coreutils-compatible `rm --one-file-system` support before any recursive real-directory deletion path and still calls `rm -- "$resolved"` for non-recursive removable targets.
 - Slice 1 resolved: a real directory passed with `--force` and without `--recursive` is refused by the documented `nsurgn` diagnostic and exit-status contract.
-- Existing tests cover `remove` force requirements, file deletion, protected paths, help exposure for `--recursive`, directory refusal without `--recursive`, unsupported `rm --one-file-system`, mountinfo path matching helpers, symlink-to-directory removal, and broken-symlink removal, but not successful recursive directory removal or mount-point refusal.
+- Existing tests cover `remove` force requirements, file deletion, protected paths, help exposure for `--recursive`, directory refusal without `--recursive`, unsupported `rm --one-file-system`, successful recursive directory removal, mount-point refusal integration when bind mounts are available, mountinfo path matching helpers, symlink-to-directory removal, and broken-symlink removal.
 
 ## Implementation Branch Shape
 
@@ -269,6 +269,23 @@ fix: prepare recursive remove safety checks
 ```
 
 ## Slice 4: Refuse Mount Points and Execute Recursive Directory Removal
+
+Status: complete on `fix/remove-directory-recursive-guard`.
+
+Verification:
+
+```sh
+bats --filter "remove with --force --recursive deletes an ordinary directory|remove with --force --recursive refuses|remove with --force --recursive fails before deletion when rm lacks one-file-system support|mountinfo helper" tests/cli.bats
+shellcheck bin/* lib/*.sh tests/*.bats
+shfmt -d .
+./bin/nsurgn --help
+./bin/nsurgn --version
+bats tests
+```
+
+Environment note:
+
+- The bind-mount integration tests for target and nested mount-point refusal are present and skipped in the current environment with `temporary bind mounts unavailable`.
 
 Goal:
 
