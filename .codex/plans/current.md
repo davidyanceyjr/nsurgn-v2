@@ -155,23 +155,16 @@ Use `fix:` instead if implementation changes are required.
 
 Goal:
 
-- Make `remove --force --recursive` remove an ordinary real directory when no mount-point risk is present.
+- Add the safety helpers required before any successful recursive directory deletion path exists.
 - Fail before deletion when GNU/coreutils-compatible `rm --one-file-system` support is unavailable.
+- Prove mountinfo path matching with deterministic fixture tests.
 
 Tests first in `tests/cli.bats`:
 
-- `remove --force --recursive` removes a real directory.
-  - Status: `0`.
-  - Stdout:
-
-```text
-removed: <resolved-target>
-```
-
-  - Stderr: empty.
-  - File effect: directory no longer exists.
-
 - Recursive removal fails clearly when `rm --one-file-system` is unsupported.
+  - Use a temporary `PATH` directory containing an `rm` shim for this one `run_cli remove ... --recursive` invocation.
+  - The shim must fail the capability probe for `--one-file-system`.
+  - Test setup and teardown must keep using the normal system `rm`.
   - Status: `9`.
   - Stdout: empty.
   - Stderr:
@@ -182,9 +175,20 @@ error: recursive removal requires GNU rm with --one-file-system
 
   - File effect: directory remains present.
 
+- Helper-level fixture coverage for mountinfo path matching:
+  - Source `lib/output.sh` and `lib/commands.sh` directly from Bats for pure helper tests.
+  - Run helper tests in subshells so sourcing `lib/commands.sh` cannot affect later CLI tests.
+  - Pass fixture mountinfo through function input or temporary files, not through CLI-visible flags, config files, or persistent environment variables.
+  - `/tmp/a` matches `/tmp/a`.
+  - `/tmp/a` matches `/tmp/a/mnt`.
+  - `/tmp/a` does not match `/tmp/abc`.
+  - repeated slash and trailing slash inputs normalize consistently, such as `/tmp//a` and `/tmp/a/`.
+  - mountinfo octal escapes such as `\040` decode for comparison.
+
 Expected failing checkpoint:
 
-- `--recursive` is parsed after Slice 1, but the command still cannot remove directories recursively or lacks the unsupported-platform guard.
+- `--recursive` is parsed after Slice 1, but unsupported `rm` is not detected before deletion.
+- Mount-point helper tests fail because no helper exists.
 
 Implementation:
 
@@ -194,38 +198,46 @@ Implementation:
 rm_supports_one_file_system()
 ```
 
-- Call the helper before recursive deletion.
-- If unsupported, return `9` before touching the target.
-- For ordinary directories after safety checks pass, run:
+- Add narrow mountinfo helpers in `lib/commands.sh`, for example:
 
 ```bash
-rm -r --one-file-system -- "$resolved"
+normalize_artifact_path_for_mountinfo()
+decode_mountinfo_path()
+mount_points_under_target()
+procfs_path_for_artifact_path()
 ```
 
-- Use `--one-file-system` as a defensive backstop, not as the only mount-point safeguard.
+- Call the helper before recursive deletion.
+- If unsupported, return `9` before touching the target.
+- Do not add a successful recursive deletion path in this slice.
 
 Commit:
 
 ```text
-fix: remove directories with recursive guard
+fix: prepare recursive remove safety checks
 ```
 
-## Slice 4: Refuse Target and Nested Mount Points
+## Slice 4: Refuse Mount Points and Execute Recursive Directory Removal
 
 Goal:
 
 - Refuse recursive deletion when `TARGET_PATH` is itself a mount point.
 - Refuse recursive deletion when any nested path under `TARGET_PATH` is a mount point.
 - Keep mountinfo comparisons in artifact namespace paths, not host procfs paths.
+- Make `remove --force --recursive` remove an ordinary real directory only after `rm --one-file-system` support and mount-point refusal checks pass.
 
 Tests first in `tests/cli.bats`:
 
-- Helper-level fixture coverage for mountinfo path matching:
-  - `/tmp/a` matches `/tmp/a`.
-  - `/tmp/a` matches `/tmp/a/mnt`.
-  - `/tmp/a` does not match `/tmp/abc`.
-  - repeated slash and trailing slash inputs normalize consistently, such as `/tmp//a` and `/tmp/a/`.
-  - mountinfo octal escapes such as `\040` decode for comparison.
+- `remove --force --recursive` removes a real directory with no mount point at or under the target.
+  - Status: `0`.
+  - Stdout:
+
+```text
+removed: <resolved-target>
+```
+
+  - Stderr: empty.
+  - File effect: directory no longer exists.
 
 - Integration coverage where the test environment permits a temporary bind mount:
   - `remove --force --recursive` refuses a target directory that is a mount point.
@@ -244,30 +256,28 @@ If bind mounts are unavailable, keep the privileged integration tests skipped wi
 
 Expected failing checkpoint:
 
-- Mount-point helper tests fail because no helper exists.
+- Recursive directory removal still cannot succeed, or mount-point refusal is missing.
 - Privileged integration tests either fail for missing refusal logic or skip for missing mount privileges.
 
 Implementation:
-
-- Add narrow helpers in `lib/commands.sh`, for example:
-
-```bash
-normalize_artifact_path_for_mountinfo()
-decode_mountinfo_path()
-mount_points_under_target()
-procfs_path_for_artifact_path()
-```
 
 - Read `/proc/<leader-pid>/mountinfo`, not `/proc/self/mountinfo`.
 - Compare decoded mountinfo mount-point paths against normalized artifact namespace `TARGET_PATH`.
 - Use exact path-boundary matching.
 - Convert refused namespace mount points back to `/proc/<leader-pid>/root/...` for diagnostics.
 - Refuse the first mount point at or under the target before running `rm`.
+- For ordinary directories after all safety checks pass, run:
+
+```bash
+rm -r --one-file-system -- "$resolved"
+```
+
+- Use `--one-file-system` as a defensive backstop, not as the only mount-point safeguard.
 
 Commit:
 
 ```text
-fix: refuse recursive remove across mount points
+fix: remove directories with recursive mount guard
 ```
 
 ## Slice 5: Final Verification and Branch Handoff
