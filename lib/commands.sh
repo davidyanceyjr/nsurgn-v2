@@ -101,6 +101,57 @@ refuse_protected_remove_path() {
 	esac
 }
 
+rm_supports_one_file_system() {
+	rm --help 2>/dev/null | grep -q -- '--one-file-system'
+}
+
+normalize_artifact_path_for_mountinfo() {
+	local path="$1"
+
+	while [[ "$path" == *"//"* ]]; do
+		path="${path//\/\//\/}"
+	done
+	while [[ "$path" != "/" && "$path" == */ ]]; do
+		path="${path%/}"
+	done
+	if [[ -z "$path" ]]; then
+		path="/"
+	fi
+	printf '%s\n' "$path"
+}
+
+decode_mountinfo_path() {
+	printf '%b\n' "$1"
+}
+
+mount_points_under_target() {
+	local target="$1"
+	local mountinfo_file="$2"
+	local normalized_target
+	local encoded_mount_point
+	local mount_point
+	local normalized_mount_point
+
+	normalized_target="$(normalize_artifact_path_for_mountinfo "$target")"
+	awk '{print $5}' "$mountinfo_file" | while IFS= read -r encoded_mount_point; do
+		mount_point="$(decode_mountinfo_path "$encoded_mount_point")"
+		normalized_mount_point="$(normalize_artifact_path_for_mountinfo "$mount_point")"
+		if [[ "$normalized_mount_point" == "$normalized_target" ||
+			"$normalized_mount_point" == "$normalized_target"/* ]]; then
+			printf '%s\n' "$normalized_mount_point"
+		fi
+	done
+}
+
+procfs_path_for_artifact_path() {
+	local root="$1"
+	local artifact_path="$2"
+	local normalized_artifact_path
+
+	normalized_artifact_path="$(normalize_artifact_path_for_mountinfo "$artifact_path")"
+	printf '%s/%s\n' "${root%/}" "${normalized_artifact_path#/}"
+}
+
 resolve_target_path() {
 	local target="$1"
 	local path="$2"
@@ -675,6 +726,12 @@ cmd_remove() {
 	if [[ -d "$resolved" && ! -L "$resolved" && "$recursive" -eq 0 ]]; then
 		error "directory removal requires --recursive: $resolved"
 		return 5
+	fi
+	if [[ -d "$resolved" && ! -L "$resolved" && "$recursive" -eq 1 ]]; then
+		if ! rm_supports_one_file_system; then
+			error "recursive removal requires GNU rm with --one-file-system"
+			return 9
+		fi
 	fi
 	rm -- "$resolved"
 	printf 'removed: %s\n' "$resolved"

@@ -2,51 +2,56 @@
 
 ## State
 
-- Branch: `docs/plan-remove-recursive-slices`
-- Status: planning-only branch ready to hand off for next-session implementation.
-- Last completed step: adjusted `.codex/plans/current.md` so recursive deletion is not enabled before `rm --one-file-system` and mount-point safety checks are planned. Latest plan commit is `f438e91 docs: adjust recursive remove plan slices`.
+- Branch: `fix/remove-directory-recursive-guard`
+- Status: Slice 3 implemented, verified, and ready for the next implementation slice.
+- Last completed step: added unsupported `rm --one-file-system` guard and mountinfo helper fixture coverage; updated `.codex/plans/current.md` to mark Slice 3 complete.
 
 ## Changed Files
 
+- `lib/commands.sh`
+- `tests/cli.bats`
 - `.codex/plans/current.md`
 - `.codex/handoff/session_handoff.md`
-- Working tree note: `.gitignore` is untracked and was present before this handoff; it was not touched.
+- Working tree note: `.gitignore` is untracked and was not touched.
 
 ## Verification
 
 Commands run:
 
 ```sh
-git status --short --branch
-git branch --show-current
-git diff --stat
-git log --oneline --decorate -5
+bats --filter "remove with --force --recursive fails before deletion when rm lacks one-file-system support|mountinfo helper" tests/cli.bats
+bats --filter "remove" tests/cli.bats
+shellcheck bin/* lib/*.sh tests/*.bats
+shfmt -d .
+./bin/nsurgn --help
+./bin/nsurgn --version
+bats tests
 git diff --check
 ```
 
 Results:
 
-- Passing: `git diff --check` passed after the plan adjustment.
+- Passing: all commands above passed.
 - Failing: none observed.
-- Not run: `bats tests`, `bats tests/cli.bats`, `shellcheck bin/* lib/*.sh tests/*.bats`, `shfmt -d .`, `./bin/nsurgn --help`, `./bin/nsurgn --version`.
+- Not run: no additional project checks identified for this slice.
+- Skipped: `bats tests` skipped `tree prints visible non-host pid namespace rows` because no visible non-host PID namespace pair was available.
 
 ## Alignment
 
-- Man page: `doc/nsurgn.1.md` documents `nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]`, directory refusal without `--recursive`, recursive mount-point refusal, and unsupported `rm --one-file-system` exit `9`.
-- Tests: no tests have been added for `remove --recursive` on this branch.
-- Implementation: no implementation files have been changed on this branch. Current implementation still exposes and parses only `remove ... --force`.
-- Plan: `.codex/plans/current.md` is the active coordination plan. It now requires safety helper and mountinfo fixture work before any successful recursive directory deletion path is added.
+- Man page: `doc/nsurgn.1.md` already documents unsupported recursive removal exit `9`, mount-point refusal, and future successful recursive removal.
+- Tests: Slice 3 covers unsupported `rm --one-file-system` and mountinfo helper matching. Successful recursive directory removal and mount-point refusal are not covered yet.
+- Implementation: Slice 3 adds the unsupported-`rm` guard before recursive real-directory deletion and mountinfo path helpers. It intentionally does not add successful recursive directory deletion.
+- Plan: `.codex/plans/current.md` marks Slices 1, 2, and 3 complete. Slice 4 is next.
 
 ## Blockers
 
-- None for starting the implementation branch.
+- None for starting Slice 4.
 
 ## Next Smallest Action
 
-- In the next session, start from `.codex/plans/current.md`, create or switch to `fix/remove-directory-recursive-guard`, and execute Slice 1: add Bats acceptance coverage for `--help` showing `[--recursive]` and for refusing a real directory without `--recursive`; confirm the tests fail for the expected reason before implementing.
+- Execute Slice 4 from `.codex/plans/current.md`: add acceptance coverage for successful ordinary recursive directory removal and mount-point refusal, then implement mount-point checks before running `rm -r --one-file-system -- "$resolved"`.
 
 ## Do Not Touch
 
-- Do not implement `remove --recursive` on `docs/plan-remove-recursive-slices`; use `fix/remove-directory-recursive-guard` for implementation.
 - Do not modify the untracked `.gitignore` unless explicitly directed.
 - Do not change unrelated `extract`, `install`, `inject`, `cat`, `checksum`, `exists`, `ls`, `stat`, `signal`, or `enter` behavior.

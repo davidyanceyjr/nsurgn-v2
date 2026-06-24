@@ -440,6 +440,39 @@ find_nonhost_pid_pair() {
 	[[ "$(captured_stderr)" == *"error: directory removal requires --recursive: $resolved_path"* ]]
 }
 
+@test "remove with --force --recursive fails before deletion when rm lacks one-file-system support" {
+	target_path="$TEST_TMPDIR/remove-dir-unsupported-rm"
+	shim_dir="$TEST_TMPDIR/shim-bin"
+	mkdir "$target_path"
+	printf 'keep me\n' >"$target_path/child.txt"
+	mkdir "$shim_dir"
+	cat >"$shim_dir/rm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1-}" == "--help" ]]; then
+	printf 'usage: rm\n'
+	exit 0
+fi
+
+printf 'rm shim should not delete during this test\n' >&2
+exit 1
+EOF
+	chmod +x "$shim_dir/rm"
+
+	run bash -c '
+		PATH="$1:$PATH" "$2" remove "pid:$3" "$4" --force --recursive >"$5" 2>"$6"
+	' _ "$shim_dir" "$TOOL" "$$" "$target_path" "$STDOUT_FILE" "$STDERR_FILE"
+
+	[ "$status" -eq 9 ]
+	[ -d "$target_path" ]
+	[ -f "$target_path/child.txt" ]
+	[ "$(cat "$target_path/child.txt")" = "keep me" ]
+	[ "$output" = "" ]
+	[ "$(captured_stdout)" = "" ]
+	[ "$(captured_stderr)" = "error: recursive removal requires GNU rm with --one-file-system" ]
+}
+
 @test "remove with --force removes a symlink to a directory without --recursive" {
 	target_dir="$TEST_TMPDIR/referent-dir"
 	target_path="$TEST_TMPDIR/remove-dir-link"
@@ -458,6 +491,44 @@ find_nonhost_pid_pair() {
 	[ "$(cat "$target_dir/child.txt")" = "keep me" ]
 	[ "$(captured_stdout)" = "removed: $resolved_path" ]
 	[ "$(captured_stderr)" = "" ]
+}
+
+@test "mountinfo helper matches exact and nested mount points only" {
+	mountinfo_file="$TEST_TMPDIR/mountinfo"
+	cat >"$mountinfo_file" <<'EOF'
+30 23 0:25 / /tmp/a rw,relatime - tmpfs tmpfs rw
+31 23 0:26 / /tmp/a/mnt rw,relatime - tmpfs tmpfs rw
+32 23 0:27 / /tmp/abc rw,relatime - tmpfs tmpfs rw
+EOF
+
+	run bash -c '
+		set -euo pipefail
+		source "$1/lib/output.sh"
+		source "$1/lib/commands.sh"
+		mount_points_under_target "/tmp//a/" "$2"
+	' _ "$PROJECT_ROOT" "$mountinfo_file"
+
+	[ "$status" -eq 0 ]
+	[ "$output" = $'/tmp/a\n/tmp/a/mnt' ]
+}
+
+@test "mountinfo helper decodes octal escapes before comparing paths" {
+	mountinfo_file="$TEST_TMPDIR/mountinfo"
+	cat >"$mountinfo_file" <<'EOF'
+30 23 0:25 / /tmp/space\040dir rw,relatime - tmpfs tmpfs rw
+31 23 0:26 / /tmp/space\040dir/nested rw,relatime - tmpfs tmpfs rw
+32 23 0:27 / /tmp/space rw,relatime - tmpfs tmpfs rw
+EOF
+
+	run bash -c '
+		set -euo pipefail
+		source "$1/lib/output.sh"
+		source "$1/lib/commands.sh"
+		mount_points_under_target "/tmp/space dir" "$2"
+	' _ "$PROJECT_ROOT" "$mountinfo_file"
+
+	[ "$status" -eq 0 ]
+	[ "$output" = $'/tmp/space dir\n/tmp/space dir/nested' ]
 }
 
 @test "remove with --force removes a broken symlink without --recursive" {
