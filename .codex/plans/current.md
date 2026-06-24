@@ -5,10 +5,10 @@
 - Work type: mixed coordination and implementation work.
 - Target implementation branch: `fix/remove-directory-recursive-guard`.
 - Target behavior: execute `nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force --recursive` for real directories while preserving documented destructive-operation safeguards.
-- Status: Slices 1, 2, 3, and 4 are implemented and verified on `fix/remove-directory-recursive-guard`; Slice 5 has not started.
+- Status: Slices 1, 2, 3, 4, and 5 are complete on `fix/remove-directory-recursive-guard`.
 - Last checked: 2026-06-24.
-- Current repo state: `main` contains the documented `remove --recursive` contract. On `fix/remove-directory-recursive-guard`, Slice 1 exposes `--recursive` in help, parses it, and refuses real directories without `--recursive`. Slice 2 adds regression coverage for symlink-to-directory and broken-symlink removal semantics without production code changes. Slice 3 adds the unsupported `rm --one-file-system` guard before recursive directory deletion and fixture-tested mountinfo path matching helpers. Slice 4 removes ordinary real directories with `rm -r --one-file-system` after refusing mount points at or under the target using `/proc/<leader-pid>/mountinfo`.
-- Next implementation slice: Slice 5, final verification and branch handoff.
+- Current repo state: `main` contains the documented `remove --recursive` contract. On `fix/remove-directory-recursive-guard`, Slice 1 exposes `--recursive` in help, parses it, and refuses real directories without `--recursive`. Slice 2 adds regression coverage for symlink-to-directory and broken-symlink removal semantics without production code changes. Slice 3 adds the unsupported `rm --one-file-system` guard before recursive directory deletion and fixture-tested mountinfo path matching helpers. Slice 4 removes ordinary real directories with `rm -r --one-file-system` after refusing mount points at or under the target using `/proc/<leader-pid>/mountinfo`. Slice 5 final verification passes, and the stale session handoff was intentionally zeroed per user instruction.
+- Next implementation slice: none; current plan slices are complete.
 
 This file is the active coordination plan. There is no separate findings file for this slice.
 
@@ -349,6 +349,25 @@ fix: remove directories with recursive mount guard
 ```
 
 ## Slice 5: Final Verification and Branch Handoff
+
+Status: complete on `fix/remove-directory-recursive-guard`.
+
+Verification:
+
+```sh
+bats tests/cli.bats
+shellcheck bin/* lib/*.sh tests/*.bats
+shfmt -d .
+bats tests
+./bin/nsurgn --help
+./bin/nsurgn --version
+git diff --check
+```
+
+Environment note:
+
+- `bats tests/cli.bats` and `bats tests` passed with the expected skips for unavailable temporary bind mounts and no visible non-host PID namespace pair.
+- `.codex/handoff/session_handoff.md` was stale and was zeroed rather than updated per user instruction.
 
 Goal:
 
