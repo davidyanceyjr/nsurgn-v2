@@ -2,197 +2,281 @@
 
 ## State
 
-- Work type: mixed coordination for one implementation slice.
-- Active slice: `fix/remove-directory-recursive-guard`.
-- Planned implementation branch: `fix/remove-directory-recursive-guard`.
-- Status: selected for implementation planning; man-page exit-code mappings are documented, tests and implementation not started.
-- Last handoff: `.codex/handoff/session_handoff.md`.
-- Last completed branch: `fix/install-refuse-nonregular-host-source`.
-- Last checked: 2026-06-20.
-- Review findings: `.codex/plans/findings.md`. Prior findings were resolved into this plan on 2026-06-20.
+- Work type: planning-only coordination for one future implementation branch.
+- Target implementation branch: `fix/remove-directory-recursive-guard`.
+- Target behavior: execute `nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force --recursive` for real directories while preserving documented destructive-operation safeguards.
+- Status: plan refreshed after merge to `main`; tests and implementation have not started for this branch.
+- Last checked: 2026-06-24.
+- Current repo state at refresh: `main` contains the documented `remove --recursive` contract, but implementation still exposes and parses only `remove ... --force`.
+- Handoff source: `.codex/handoff/session_handoff.md` says the next action is selecting the next documented behavior slice.
+
+This file is the active coordination plan. There is no separate findings file for this slice.
 
 ## Contract Source
 
 - Man page: `doc/nsurgn.1.md`
-- Documented command: `nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]`
+- Documented command:
+
+```text
+nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]
+```
+
 - Relevant documented behavior:
   - `remove` is destructive and always requires `--force`.
   - `TARGET_PATH` must be absolute and must not contain traversal.
+  - Protected paths are refused.
   - Removing a symlink removes the symlink itself, not the symlink target.
   - Directory removal requires `--recursive`.
-  - Protected paths are refused.
   - Recursive directory removal refuses any mount point at or under `TARGET_PATH` before deletion.
-  - Recursive removal must not cross nested mount points inside the target directory.
+  - Recursive directory removal requires GNU/coreutils-compatible `rm` support for `--one-file-system`.
+  - Directory removal without `--recursive`, target mount-point refusal, and nested mount-point refusal exit `5`.
+  - Unsupported recursive removal because `rm --one-file-system` is unavailable exits `9`.
 
 ## Current Gap
 
+- `lib/commands.sh` usage still shows `remove ARTIFACT_OR_PID TARGET_PATH --force`.
 - `cmd_remove` parses `--force` but not `--recursive`.
-- `cmd_remove` calls `rm -- "$resolved"` for every target.
-- A real directory passed with `--force` is refused only by `rm`, producing an implementation-dependent diagnostic rather than the documented `nsurgn` contract.
-- `--help`/usage text does not expose the documented `--recursive` option.
-- No acceptance test currently proves directory refusal without `--recursive`, recursive directory removal with `--recursive`, symlink handling for directory targets, broken symlink removal, help output, or the documented unsupported-platform behavior for recursive removal.
-- No acceptance test currently proves target or nested mount-point refusal.
-- The mount-point implementation plan must keep path domains separate: `/proc/<leader-pid>/mountinfo` reports artifact namespace paths, while `resolve_target_path` returns host-visible procfs paths under `/proc/<leader-pid>/root`.
-- The man page must not imply a separate non-recursive mount-point refusal path unless that behavior is also tested and implemented.
+- `cmd_remove` calls `rm -- "$resolved"` for all removable targets.
+- A real directory passed with `--force` is refused by `rm`, not by the documented `nsurgn` diagnostic and exit-status contract.
+- Existing tests cover `remove` force requirements, file deletion, and protected paths, but not recursive directory removal, directory refusal without `--recursive`, symlink-to-directory behavior, broken symlinks, unsupported `rm`, or mount-point refusal.
 
-## Scope
+## Implementation Branch Shape
 
-Implement the smallest directory-recursive guard slice:
+Use one branch:
 
-- Parse `--recursive` for `remove`.
-- Refuse real directories when `--recursive` is absent.
-- Leave refused directories and their contents intact.
-- Refuse recursive removal when the target directory itself is a mount point.
-- Refuse recursive removal when any nested directory under the target is a mount point.
-- Do not remove or cross any mount point during recursive deletion.
-- Remove real directories only when both `--force` and `--recursive` are present.
-- Continue removing symlinks themselves without requiring `--recursive`, including symlinks that point at directories.
-- Continue removing broken symlinks themselves without requiring `--recursive`.
-- Update `--help`/usage output so the implemented command surface shows `remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]`.
-- Preserve existing behavior for files, missing targets, protected paths, unknown options, and `--force` refusal.
-- Use `rm --one-file-system` for recursive removal only after documenting the GNU/coreutils-compatible `rm` dependency and unsupported-platform failure.
+```text
+fix/remove-directory-recursive-guard
+```
 
-Out of scope for this slice:
+Use small commits on that branch. Each implementation slice below should follow:
 
-- Broader remove safeguards beyond the documented directory-recursive behavior.
-- Non-recursive mount-point-specific diagnostics; without `--recursive`, real directories are refused by the directory-recursive guard.
-- Race-specific exit `8` handling unless the man page and acceptance tests are tightened first.
-- Install, extract, inject, cat, checksum, exists, ls, stat, signal, or enter behavior.
+```text
+man page check -> acceptance tests -> failing test checkpoint -> implementation -> verification -> commit
+```
 
-## Man Page Status Before Tests
+The man page already documents the selected behavior. Do not change it unless a slice intentionally changes the user-visible contract before tests are written.
 
-`doc/nsurgn.1.md` documents the behavior needed for this slice:
+## Slice 1: Expose and Guard Recursive Directory Removal
 
-- Command synopsis: `nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]`.
-- Directory removal requires `--recursive`.
-- Recursive directory removal refuses any mount point at or under TARGET_PATH before deletion.
-- Recursive directory removal requires GNU/coreutils-compatible `rm` support for `--one-file-system`.
-- Directory removal without `--recursive`, target mount-point refusal, and nested mount-point refusal exit `5`.
-- Unsupported recursive removal because GNU/coreutils-compatible `rm --one-file-system` is unavailable exits `9`.
-- `STDERR` includes the exact diagnostics:
+Goal:
+
+- Make the command surface match the documented `--recursive` option.
+- Refuse real directories without `--recursive` using `nsurgn`'s own documented diagnostic.
+
+Tests first in `tests/cli.bats`:
+
+- `--help` includes:
+
+```text
+remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]
+```
+
+- `remove --force` refuses a real directory without `--recursive`.
+  - Status: `5`.
+  - Stdout: empty.
+  - Stderr contains:
 
 ```text
 error: directory removal requires --recursive: <resolved-target>
-error: refusing mount point: <resolved-target>
+```
+
+  - File effect: directory and contained file remain present.
+
+Expected failing checkpoint:
+
+- Help output still lacks `[--recursive]`.
+- Directory refusal still comes from `rm` or a different status/diagnostic.
+
+Implementation:
+
+- Update `usage()` in `lib/commands.sh`.
+- Add `recursive=0` in `cmd_remove`.
+- Parse `--recursive` as a recognized option.
+- Detect real directories with `[[ -d "$resolved" && ! -L "$resolved" ]]`.
+- If real directory and `recursive=0`, write the documented diagnostic to stderr and return `5`.
+- Preserve existing file removal, missing target handling, protected path refusal, unknown-option handling, and `--force` refusal.
+
+Commit:
+
+```text
+fix: require recursive remove for directories
+```
+
+## Slice 2: Preserve Symlink Removal Semantics
+
+Goal:
+
+- Prove that adding directory guards does not make symlinks follow directory behavior.
+
+Tests first in `tests/cli.bats`:
+
+- `remove --force` removes a symlink to a directory without requiring `--recursive`.
+  - Status: `0`.
+  - Stdout:
+
+```text
+removed: <resolved-target>
+```
+
+  - Stderr: empty.
+  - File effect: symlink is removed; referent directory remains.
+
+- `remove --force` removes a broken symlink without requiring `--recursive`.
+  - Status: `0`.
+  - Stdout:
+
+```text
+removed: <resolved-target>
+```
+
+  - Stderr: empty.
+  - File effect: broken symlink is removed.
+
+Expected failing checkpoint:
+
+- If current behavior already passes, record that as a non-failing regression-coverage checkpoint and commit only the tests.
+- If the new directory guard breaks symlink behavior, fix it before moving on.
+
+Implementation:
+
+- Treat `[[ -L "$resolved" ]]` as removable even when `[[ -e "$resolved" ]]` is false.
+- Keep symlinks out of the real-directory branch.
+- Keep success stdout unchanged.
+
+Commit:
+
+```text
+test: cover remove symlink directory targets
+```
+
+Use `fix:` instead if implementation changes are required.
+
+## Slice 3: Execute Recursive Directory Removal
+
+Goal:
+
+- Make `remove --force --recursive` remove an ordinary real directory when no mount-point risk is present.
+- Fail before deletion when GNU/coreutils-compatible `rm --one-file-system` support is unavailable.
+
+Tests first in `tests/cli.bats`:
+
+- `remove --force --recursive` removes a real directory.
+  - Status: `0`.
+  - Stdout:
+
+```text
+removed: <resolved-target>
+```
+
+  - Stderr: empty.
+  - File effect: directory no longer exists.
+
+- Recursive removal fails clearly when `rm --one-file-system` is unsupported.
+  - Status: `9`.
+  - Stdout: empty.
+  - Stderr:
+
+```text
 error: recursive removal requires GNU rm with --one-file-system
 ```
 
-- `FILES` documents `/proc/<pid>/mountinfo` for recursive `remove` mount-point refusal.
+  - File effect: directory remains present.
 
-No further man-page change is required before adding acceptance tests unless the implementation slice changes the documented contract. The next action is plan review, then create or switch to `fix/remove-directory-recursive-guard` and add failing acceptance tests for the documented behavior.
+Expected failing checkpoint:
 
-## Planned Test Changes
+- `--recursive` is parsed after Slice 1, but the command still cannot remove directories recursively or lacks the unsupported-platform guard.
 
-Add Bats coverage in `tests/cli.bats` before implementation:
+Implementation:
 
-- `--help` includes `remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]`.
-- `remove --force` refuses a real directory without `--recursive`.
-  - Expected status: `5`.
-  - Expected stdout: empty.
-  - Expected stderr: `error: directory removal requires --recursive: <resolved-target>`.
-  - Expected file effect: directory and contained file remain present.
-- `remove --force --recursive` removes a real directory and reports the file effect.
-  - Expected status: `0`.
-  - Expected stdout: `removed: <resolved-target>`.
-  - Expected stderr: empty.
-  - Expected file effect: directory no longer exists.
-- `remove --force --recursive` refuses a target directory that is a mount point.
-  - Expected status: `5`.
-  - Expected stdout: empty.
-  - Expected stderr: `error: refusing mount point: <resolved-target>`.
-  - Expected file effect: mount point and mounted contents remain present.
-  - Test setup: prefer a temporary bind mount when the test environment has the required privilege. If unavailable, exercise the internal mount-point detection helper with fixture input and keep the privileged integration test skipped with an explicit reason.
-- `remove --force --recursive` refuses a directory tree containing a nested mount point.
-  - Expected status: `5`.
-  - Expected stdout: empty.
-  - Expected stderr: `error: refusing mount point: <nested-resolved-mount-point>`.
-  - Expected file effect: target directory, ordinary contents, mount point, and mounted contents remain present.
-  - Test setup: prefer a temporary bind mount when the test environment has the required privilege. If unavailable, exercise the internal mount-point detection helper with fixture input and keep the privileged integration test skipped with an explicit reason.
-  - Helper fixture coverage must prove namespace-path comparison, including a target such as `/tmp/a`, a non-match such as `/tmp/abc`, and a nested mount such as `/tmp/a/mnt`.
-- `remove --force --recursive` fails clearly when `rm --one-file-system` is unsupported.
-  - Expected status: `9`.
-  - Expected stdout: empty.
-  - Expected stderr: `error: recursive removal requires GNU rm with --one-file-system`.
-  - Expected file effect: directory remains present.
-  - Test setup: exercise a narrow internal `rm_supports_one_file_system` helper so the failure branch is proven before any deletion path can run. Do not use a PATH fake that can intercept both the capability probe and the destructive `rm` call.
-- `remove --force` removes a symlink to a directory without requiring `--recursive`.
-  - Expected status: `0`.
-  - Expected stdout: `removed: <resolved-target>`.
-  - Expected stderr: empty.
-  - Expected file effect: symlink is removed and referent directory remains.
-- `remove --force` removes a broken symlink without requiring `--recursive`.
-  - Expected status: `0`.
-  - Expected stdout: `removed: <resolved-target>`.
-  - Expected stderr: empty.
-  - Expected file effect: broken symlink is removed.
-
-## Planned Implementation
-
-- In `lib/commands.sh`, update `usage()` so `remove` includes `[--recursive]`.
-- In `cmd_remove`, add a local `recursive=0` flag.
-- Extend option parsing:
-  - `--force` sets `force=1`.
-  - `--recursive` sets `recursive=1`.
-  - all other options remain errors with exit `2`.
-- Keep `--force` validation before destructive behavior.
-- Keep protected-path refusal before resolving the target.
-- Parse the target leader pid before mountinfo checks so the implementation can read `/proc/<leader-pid>/mountinfo` and build `/proc/<leader-pid>/root/...` diagnostic paths from matching namespace mount points.
-- Resolve the target path before diagnostics that need `<resolved-target>`. Keep this procfs path for file effects and user-facing diagnostics; do not use it as the mountinfo comparison key.
-- Preserve broken symlink behavior by treating `[[ -L "$resolved" ]]` as an existing removable target even when `[[ -e "$resolved" ]]` is false.
-- Add a narrow `rm_supports_one_file_system` helper for the dependency check. `cmd_remove` must call this helper before recursive deletion; if unsupported, print `error: recursive removal requires GNU rm with --one-file-system` and return `9` before touching the target.
-- Derive a separate normalized artifact namespace target path from `TARGET_PATH` for mountinfo matching with a narrow helper, for example:
+- Add a narrow helper in `lib/commands.sh`:
 
 ```bash
-normalize_artifact_path_for_mountinfo()
+rm_supports_one_file_system()
 ```
 
-  This helper should preserve a single leading `/`, collapse repeated `/` characters, and strip trailing `/` except for `/`. Keep `/` protected before this path can reach recursive deletion.
-- Detect real directories with:
-
-```bash
-[[ -d "$resolved" && ! -L "$resolved" ]]
-```
-
-- If the target is a real directory and `recursive=0`, print `error: directory removal requires --recursive: <resolved-target>` and return `5`.
-- If the target is a real directory and `recursive=1`, inspect `/proc/<leader-pid>/mountinfo` for the selected artifact leader before deletion, comparing decoded mountinfo mount-point paths against the normalized artifact namespace target path.
-- If the target itself is a mount point, print `error: refusing mount point: <resolved-target>` and return `5`.
-- If any nested directory under the target is a mount point, map the matching namespace mount point back to a procfs diagnostic path under `/proc/<leader-pid>/root` and print `error: refusing mount point: <nested-resolved-mount-point>`, then return `5`.
-- If the target is a real directory, `recursive=1`, and no target or nested mount point is present, after the dependency check passes, remove the directory with:
+- Call the helper before recursive deletion.
+- If unsupported, return `9` before touching the target.
+- For ordinary directories after safety checks pass, run:
 
 ```bash
 rm -r --one-file-system -- "$resolved"
 ```
 
-- Use `--one-file-system` as a defensive backstop, not as the primary mount-point refusal mechanism.
-- Treat GNU/coreutils-compatible `rm --one-file-system` as a Linux platform assumption for this slice.
-- Otherwise, run the existing `rm -- "$resolved"` path for files and symlinks.
-- Keep success stdout as `removed: <resolved-target>`.
+- Use `--one-file-system` as a defensive backstop, not as the only mount-point safeguard.
 
-## Internal Structure
+Commit:
 
-Keep this slice in `lib/commands.sh`.
+```text
+fix: remove directories with recursive guard
+```
 
-Add narrow helpers to keep `cmd_remove` readable, for example:
+## Slice 4: Refuse Target and Nested Mount Points
+
+Goal:
+
+- Refuse recursive deletion when `TARGET_PATH` is itself a mount point.
+- Refuse recursive deletion when any nested path under `TARGET_PATH` is a mount point.
+- Keep mountinfo comparisons in artifact namespace paths, not host procfs paths.
+
+Tests first in `tests/cli.bats`:
+
+- Helper-level fixture coverage for mountinfo path matching:
+  - `/tmp/a` matches `/tmp/a`.
+  - `/tmp/a` matches `/tmp/a/mnt`.
+  - `/tmp/a` does not match `/tmp/abc`.
+  - repeated slash and trailing slash inputs normalize consistently, such as `/tmp//a` and `/tmp/a/`.
+  - mountinfo octal escapes such as `\040` decode for comparison.
+
+- Integration coverage where the test environment permits a temporary bind mount:
+  - `remove --force --recursive` refuses a target directory that is a mount point.
+  - `remove --force --recursive` refuses a directory tree containing a nested mount point.
+  - Status: `5`.
+  - Stdout: empty.
+  - Stderr:
+
+```text
+error: refusing mount point: <resolved-target-or-nested-resolved-mount-point>
+```
+
+  - File effect: target directory, ordinary contents, mount point, and mounted contents remain present.
+
+If bind mounts are unavailable, keep the privileged integration tests skipped with explicit reasons and rely on helper fixture coverage for the path-domain logic.
+
+Expected failing checkpoint:
+
+- Mount-point helper tests fail because no helper exists.
+- Privileged integration tests either fail for missing refusal logic or skip for missing mount privileges.
+
+Implementation:
+
+- Add narrow helpers in `lib/commands.sh`, for example:
 
 ```bash
-rm_supports_one_file_system()
 normalize_artifact_path_for_mountinfo()
+decode_mountinfo_path()
 mount_points_under_target()
 procfs_path_for_artifact_path()
 ```
 
-Do not add a new source file, framework, dependency abstraction, architecture document, or broad remove subsystem.
+- Read `/proc/<leader-pid>/mountinfo`, not `/proc/self/mountinfo`.
+- Compare decoded mountinfo mount-point paths against normalized artifact namespace `TARGET_PATH`.
+- Use exact path-boundary matching.
+- Convert refused namespace mount points back to `/proc/<leader-pid>/root/...` for diagnostics.
+- Refuse the first mount point at or under the target before running `rm`.
 
-## Verification Plan
+Commit:
 
-Follow the repository loop:
+```text
+fix: refuse recursive remove across mount points
+```
 
-1. Create or switch to `fix/remove-directory-recursive-guard`.
-2. Confirm the reviewed man-page contract still matches the selected slice.
-3. Add acceptance tests.
-4. Run `bats tests/cli.bats` and confirm the new tests fail for the expected reason.
-5. Implement only enough code to pass the tests.
-6. Run:
+## Slice 5: Final Verification and Branch Handoff
+
+Goal:
+
+- Confirm the complete branch matches the documented behavior and is review-ready.
+
+Run:
 
 ```sh
 bats tests/cli.bats
@@ -204,35 +288,40 @@ bats tests
 git diff --check
 ```
 
-7. Review the diff.
-8. Commit with:
+Review:
+
+- `doc/nsurgn.1.md` still matches implemented behavior.
+- `tests/cli.bats` proves the implemented command surface, stdout, stderr, exit statuses, and file effects.
+- No new environment variables, config files, or hidden fixture overrides were introduced.
+- No unrelated commands were changed.
+- Mount-point tests clearly distinguish helper fixture coverage from privileged integration coverage.
+
+Update handoff:
+
+- Update `.codex/handoff/session_handoff.md` with branch, changed files, commands run, passing checks, skipped checks, blockers, and next action.
+
+Final commit if only handoff/status changes are needed:
 
 ```text
-fix: require recursive remove for directories
+docs: hand off recursive remove guard branch
 ```
 
-## Expected Changed Files
+## Expected Changed Files on Implementation Branch
 
-- `tests/cli.bats`
 - `lib/commands.sh`
+- `tests/cli.bats`
+- `.codex/handoff/session_handoff.md` when pausing or handing off
 
-After this planning review, `.codex/plans/current.md` should change only for status updates, and `doc/nsurgn.1.md` should remain unchanged unless the documented contract is intentionally adjusted before tests.
+Expected unchanged unless the contract changes:
+
+- `doc/nsurgn.1.md`
+- `README.md`
+- `nsurgn_specification_v1.0.md`
 
 ## Do Not Touch
 
-- Do not remove or cross mount points during recursive deletion.
-- Do not modify unrelated file-operation commands.
-- Do not add new required external dependencies for this behavior.
-- Do not claim completion until acceptance tests and verification pass.
-
-## Mount-Point Detection Requirements
-
-- Read `/proc/<leader-pid>/mountinfo`, not `/proc/self/mountinfo`, so mount checks are based on the selected artifact leader.
-- Decode the fifth mountinfo field, the mount point path in the artifact mount namespace, including octal escapes such as `\040` for spaces.
-- Compare decoded mountinfo mount-point paths against the normalized artifact namespace target path, not against `/proc/<leader-pid>/root/...`.
-- Use exact path-boundary matching so `/tmp/a` matches `/tmp/a` and `/tmp/a/mnt`, but not `/tmp/abc`.
-- Include helper coverage for trailing slash and repeated slash inputs, such as `/tmp/a/` and `/tmp//a`, so mountinfo comparison uses one normalized artifact path.
-- Refuse the first matching mount point at or under the normalized artifact namespace target path before recursive deletion.
-- Convert the refused namespace mount point to a procfs diagnostic path with `/proc/<leader-pid>/root/${mount_point#/}`. For the target mount point itself, this should equal `<resolved-target>`.
-- Avoid a CLI-visible mountinfo override. Put mountinfo parsing in narrow helpers that accept file input internally, and test those helpers directly or through a non-user-visible test wrapper.
-- Do not add an environment variable or configuration file for test fixtures unless the man page is explicitly updated first.
+- Do not implement unrelated `extract`, `install`, `inject`, `cat`, `checksum`, `exists`, `ls`, `stat`, `signal`, or `enter` behavior.
+- Do not add a new source file unless `lib/commands.sh` becomes unreasonably hard to review.
+- Do not add a CLI-visible mountinfo fixture flag, environment variable, or config file.
+- Do not rely on `rm --one-file-system` alone to discover mount points after deletion has begun.
+- Do not claim recursive remove is complete until the acceptance tests and final verification commands pass.
