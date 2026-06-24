@@ -440,6 +440,40 @@ find_nonhost_pid_pair() {
 	[[ "$(captured_stderr)" == *"error: directory removal requires --recursive: $resolved_path"* ]]
 }
 
+@test "remove with --force removes a symlink to a directory without --recursive" {
+	target_dir="$TEST_TMPDIR/referent-dir"
+	target_path="$TEST_TMPDIR/remove-dir-link"
+	resolved_path="/proc/$$/root$target_path"
+	mkdir "$target_dir"
+	printf 'keep me\n' >"$target_dir/child.txt"
+	ln -s "$target_dir" "$target_path"
+
+	run run_cli remove "pid:$$" "$target_path" --force
+
+	[ "$status" -eq 0 ]
+	[ ! -e "$target_path" ]
+	[ ! -L "$target_path" ]
+	[ -d "$target_dir" ]
+	[ -f "$target_dir/child.txt" ]
+	[ "$(cat "$target_dir/child.txt")" = "keep me" ]
+	[ "$(captured_stdout)" = "removed: $resolved_path" ]
+	[ "$(captured_stderr)" = "" ]
+}
+
+@test "remove with --force removes a broken symlink without --recursive" {
+	target_path="$TEST_TMPDIR/remove-broken-link"
+	resolved_path="/proc/$$/root$target_path"
+	ln -s "$TEST_TMPDIR/missing-referent" "$target_path"
+
+	run run_cli remove "pid:$$" "$target_path" --force
+
+	[ "$status" -eq 0 ]
+	[ ! -e "$target_path" ]
+	[ ! -L "$target_path" ]
+	[ "$(captured_stdout)" = "removed: $resolved_path" ]
+	[ "$(captured_stderr)" = "" ]
+}
+
 @test "remove with --force refuses protected target paths" {
 	run run_cli remove "pid:$$" /etc --force
 

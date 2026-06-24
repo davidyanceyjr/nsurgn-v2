@@ -5,9 +5,9 @@
 - Work type: planning-only coordination for one future implementation branch.
 - Target implementation branch: `fix/remove-directory-recursive-guard`.
 - Target behavior: execute `nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force --recursive` for real directories while preserving documented destructive-operation safeguards.
-- Status: Slice 1 is implemented and verified on `fix/remove-directory-recursive-guard`; later slices have not started.
+- Status: Slices 1 and 2 are implemented and verified on `fix/remove-directory-recursive-guard`; later slices have not started.
 - Last checked: 2026-06-24.
-- Current repo state: `main` contains the documented `remove --recursive` contract. On `fix/remove-directory-recursive-guard`, Slice 1 exposes `--recursive` in help, parses it, and refuses real directories without `--recursive`.
+- Current repo state: `main` contains the documented `remove --recursive` contract. On `fix/remove-directory-recursive-guard`, Slice 1 exposes `--recursive` in help, parses it, and refuses real directories without `--recursive`. Slice 2 adds regression coverage for symlink-to-directory and broken-symlink removal semantics without production code changes.
 - Handoff source: `.codex/handoff/session_handoff.md` says the next action is selecting the next documented behavior slice.
 
 This file is the active coordination plan. There is no separate findings file for this slice.
@@ -38,7 +38,7 @@ nsurgn remove ARTIFACT_OR_PID TARGET_PATH --force [--recursive]
 - Slice 1 resolved: `cmd_remove` parses `--force` and `--recursive`.
 - `cmd_remove` calls `rm -- "$resolved"` for all removable targets.
 - Slice 1 resolved: a real directory passed with `--force` and without `--recursive` is refused by the documented `nsurgn` diagnostic and exit-status contract.
-- Existing tests cover `remove` force requirements, file deletion, protected paths, help exposure for `--recursive`, and directory refusal without `--recursive`, but not recursive directory removal, symlink-to-directory behavior, broken symlinks, unsupported `rm`, or mount-point refusal.
+- Existing tests cover `remove` force requirements, file deletion, protected paths, help exposure for `--recursive`, directory refusal without `--recursive`, symlink-to-directory removal, and broken-symlink removal, but not recursive directory removal, unsupported `rm`, or mount-point refusal.
 
 ## Implementation Branch Shape
 
@@ -118,6 +118,24 @@ fix: require recursive remove for directories
 ```
 
 ## Slice 2: Preserve Symlink Removal Semantics
+
+Status: complete on `fix/remove-directory-recursive-guard`.
+
+Verification:
+
+```sh
+bats --filter "remove with --force removes a symlink to a directory" tests/cli.bats
+bats --filter "remove with --force removes a broken symlink" tests/cli.bats
+shellcheck bin/* lib/*.sh tests/*.bats
+shfmt -d .
+./bin/nsurgn --help
+./bin/nsurgn --version
+bats tests
+```
+
+Implementation note:
+
+- Current behavior already passed the Slice 2 acceptance tests, so this slice is regression coverage only.
 
 Goal:
 
