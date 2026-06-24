@@ -162,9 +162,9 @@ sources. Existing targets are refused.
 The command refuses protected target paths such as `/`, `/etc`, `/usr`, `/bin`,
 `/proc`, `/sys`, `/dev`, and `/run`.
 
-Directory-recursive removal is specified in the man page but is not implemented
-in the current executable. Passing a directory to `remove --force` is not a
-completed user-facing behavior yet.
+Directory removal requires `--recursive`. Recursive removal refuses mount
+points at or under the target path before deleting the directory tree, and
+successful removal prints the resolved target path.
 
 ## Reference Documentation
 
